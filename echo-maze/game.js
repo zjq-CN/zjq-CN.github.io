@@ -29,9 +29,9 @@ const COLORS = {
 
 // Difficulty config: used when brightMode=false and godMode=false
 const DIFFICULTY_CONFIG = {
-  EASY:  { label:'Easy',    enemySpeed:1.2, triggerDist:400, maxSpeed:3.2, fadeRate:0.98, pingRadius:800,  pingSpeed:15, pingCost:8,  dashCost:20, dashCd:40, energyDrain:0.02, enemySpawn:[1,2], itemChance:0.6, powerupChance:0.4, killEnergy:15, dropChance:0.35 },
-  NORMAL:{ label:'Normal',  enemySpeed:1.6, triggerDist:500, maxSpeed:3.0, fadeRate:0.97, pingRadius:700,  pingSpeed:14, pingCost:12, dashCost:25, dashCd:50, energyDrain:0.02, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
-  HARD:  { label:'Hard',    enemySpeed:2.0, triggerDist:600, maxSpeed:2.8, fadeRate:0.96, pingRadius:600,  pingSpeed:12, pingCost:15, dashCost:30, dashCd:60, energyDrain:0.02, enemySpawn:[2,4], itemChance:0.4, powerupChance:0.2, killEnergy:10, dropChance:0.2 },
+  EASY:  { label:'Easy',    enemySpeed:0.7, triggerDist:250, maxSpeed:3.8, fadeRate:0.99, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
+  NORMAL:{ label:'Normal',  enemySpeed:1.5, triggerDist:450, maxSpeed:3.0, fadeRate:0.97, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
+  HARD:  { label:'Hard',    enemySpeed:2.5, triggerDist:800, maxSpeed:2.5, fadeRate:0.93, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
 };
 
 const ITEM_DEFS = {
