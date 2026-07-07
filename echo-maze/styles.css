@@ -1,0 +1,141 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0a0a1a;
+  color: #eefaff;
+  font-family: Inter, system-ui, sans-serif;
+  overflow: hidden;
+}
+#game-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #050608;
+}
+
+/* ─── Help Button ─── */
+#help-btn {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid #58c4dd;
+  background: rgba(13, 18, 32, 0.85);
+  color: #58c4dd;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 100;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+#help-btn:hover {
+  background: rgba(88, 196, 221, 0.15);
+  box-shadow: 0 0 12px rgba(88, 196, 221, 0.3);
+}
+
+/* ─── Help Modal ─── */
+#help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#help-overlay.show {
+  display: flex;
+}
+
+#help-modal {
+  width: min(520px, 90vw);
+  max-height: 82vh;
+  background: #0d1220;
+  border: 1px solid #1e2640;
+  border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: modalIn 0.2s ease-out;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(-16px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+#help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid #1e2640;
+  font-size: 18px;
+  font-weight: bold;
+  color: #6cd4e8;
+}
+
+#help-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #5a6070;
+  font-size: 22px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+#help-close:hover {
+  color: #e0e6f0;
+  background: rgba(255,255,255,0.06);
+}
+
+#help-body {
+  padding: 14px 20px 20px;
+  overflow-y: auto;
+  max-height: calc(82vh - 56px);
+}
+
+.help-section {
+  margin-bottom: 12px;
+}
+.help-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #58c4dd;
+  margin-bottom: 4px;
+}
+.help-note {
+  font-weight: normal;
+  font-size: 12px;
+  color: #5a6070;
+}
+.help-text {
+  font-size: 13px;
+  color: #b0b8c8;
+  line-height: 1.75;
+}
+
+.key {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  margin: 0 1px;
+  border-radius: 4px;
+  border: 1px solid #3a8fa8;
+  background: rgba(88,196,221,0.1);
+  color: #58c4dd;
+  font-size: 11px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
