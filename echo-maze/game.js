@@ -225,6 +225,7 @@ class EchoMaze {
     this.keys={};this.mouse={x:0,y:0,down:false};this.menuRects=[];
     this.menuParticles=[];this.menuButtonGlow=0;this.menuAnimating=true;
     this.menuTransition=null;
+    this.paused=false;
     this.state='MENU_MODE';
     this.mode='SURVIVAL';
     this.difficulty='NORMAL';
@@ -387,7 +388,7 @@ class EchoMaze {
     if(event.key==='Escape'){
       if(this.state==='MENU_OPTIONS')this.transitionTo('MENU_DIFFICULTY');
       else if(this.state==='MENU_DIFFICULTY')this.transitionTo('MENU_MODE');
-      else if(this.state==='PLAYING')this.state='MENU_MODE';
+      else if(this.state==='PLAYING'){ this.paused=!this.paused; return; }
     }
 
     // Main menu: pick mode
@@ -414,6 +415,11 @@ class EchoMaze {
 
     // Playing
     if(this.state==='PLAYING'){
+      // Pause: only R to quit works (ESC handled above)
+      if(this.paused){
+        if(event.key.toLowerCase()==='r'){ this.paused=false; this.state='MENU_MODE'; return; }
+        return;
+      }
       // Item activation keys 1-4
       if(event.key==='1'){ this.activateItem('shield'); return; }
       if(event.key==='2'){ this.activateItem('scatter'); return; }
@@ -449,7 +455,7 @@ class EchoMaze {
     this.chunks={};this.playerPos=[CELL_SIZE*1.5,CELL_SIZE*1.5];this.playerVel=[0,0];
     this.energy=100;this.score=0;this.dashCooldown=0;this.shootCooldown=0;
     this.visibility={};this.visibilityTimer={};this.pings=[];this.enemies=[];this.bullets=[];
-    this.gameOver=false;this.won=false;this.lastMoveDir=[1,0];
+    this.gameOver=false;this.won=false;this.paused=false;this.lastMoveDir=[1,0];
     // Reset inventory & buffs
     this.inventory = { shield:0, scatter:0, boost:0, teleport:0 };
     this.buffs = { shield:{active:false,timer:0}, scatter:{active:false,shotsFired:0}, boost:{active:false,timer:0}, teleport:{active:false} };
@@ -558,6 +564,7 @@ class EchoMaze {
 
   update(){
     if(this.state!=='PLAYING')return;
+    if(this.paused)return;
     if(this.gameOver||this.won){
       if(this.mode==='WATCH'&&!this.restartTimer)this.restartTimer=performance.now();
       if(this.mode==='WATCH'&&this.restartTimer&&performance.now()-this.restartTimer>1500){this.restartTimer=null;this.resetGame();this.gameOver=false;this.won=false;}
@@ -789,6 +796,17 @@ class EchoMaze {
     });
     ctx.globalAlpha = 1;
     if(this.mode==='LEVEL'&&!this.gameOver&&!this.won)this.drawEdgeGoalArrow(w,h);
+    // Pause overlay
+    if(this.paused&&!this.gameOver&&!this.won){
+      ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,w,h);
+      ctx.fillStyle=COLORS.accent;ctx.font='bold 52px system-ui,sans-serif';ctx.textAlign='center';
+      const pw='PAUSED',ptw=ctx.measureText(pw).width;
+      ctx.fillText(pw,w/2-ptw/2,h/2-10);
+      ctx.fillStyle=COLORS.text;ctx.font='18px system-ui,sans-serif';
+      const ph='ESC to resume  ·  R to quit',phw=ctx.measureText(ph).width;
+      ctx.fillText(ph,w/2-phw/2,h/2+30);
+      ctx.textAlign='left';
+    }
     if(this.gameOver||this.won){
       ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,w,h);
       ctx.fillStyle=this.won?COLORS.goal:COLORS.enemy;ctx.font='bold 52px system-ui,sans-serif';
