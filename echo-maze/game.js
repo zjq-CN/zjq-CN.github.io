@@ -573,8 +573,8 @@ class EchoMaze {
     this.playerVel[0]+=ax;this.playerVel[1]+=ay;
     if(ax===0)this.playerVel[0]*=fric;if(ay===0)this.playerVel[1]*=fric;
     let ms=cfg.maxSpeed;
-    // Boost: +40% max speed when shift held and boost active
-    if (this.boosting && this.buffs.boost.active) ms *= 1.4;
+    // Boost: +80% max speed when shift held and boost active
+    if (this.boosting && this.buffs.boost.active) ms *= 1.8;
     this.effectiveMaxSpeed = ms;
     this.lastAccel = [ax, ay];
     const spd=Math.hypot(this.playerVel[0],this.playerVel[1]);
