@@ -1066,7 +1066,19 @@ class EchoMaze {
     ctx.globalAlpha = 1;
   }
 
-  frame(timestamp){this.update();this.draw();requestAnimationFrame(t=>this.frame(t));}
+  frame(timestamp){
+    if (!this._lastFrame) this._lastFrame = timestamp;
+    const elapsed = timestamp - this._lastFrame;
+    this._lastFrame = timestamp;
+    this._acc = (this._acc || 0) + elapsed;
+    const TICK = 16.6667;
+    while (this._acc >= TICK) {
+      this.update();
+      this._acc -= TICK;
+    }
+    this.draw();
+    requestAnimationFrame(t=>this.frame(t));
+  }
 }
 
 window.addEventListener('load',()=>{new EchoMaze();});
