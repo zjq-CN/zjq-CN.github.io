@@ -29,9 +29,9 @@ const COLORS = {
 
 // Difficulty config: used when brightMode=false and godMode=false
 const DIFFICULTY_CONFIG = {
-  EASY:  { label:'Easy',    enemySpeed:0.7, triggerDist:250, maxSpeed:3.8, fadeRate:0.995, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
-  NORMAL:{ label:'Normal',  enemySpeed:1.5, triggerDist:450, maxSpeed:3.0, fadeRate:0.99, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
-  HARD:  { label:'Hard',    enemySpeed:2.5, triggerDist:800, maxSpeed:2.8, fadeRate:0.985, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
+  EASY:  { label:'Easy',    enemySpeed:1.2, triggerDist:400, maxSpeed:3.2, fadeRate:0.98, pingRadius:800,  pingSpeed:15, pingCost:8,  dashCost:20, dashCd:40, energyDrain:0.02, enemySpawn:[1,2], itemChance:0.6, powerupChance:0.4, killEnergy:15, dropChance:0.35 },
+  NORMAL:{ label:'Normal',  enemySpeed:1.6, triggerDist:500, maxSpeed:3.0, fadeRate:0.97, pingRadius:700,  pingSpeed:14, pingCost:12, dashCost:25, dashCd:50, energyDrain:0.02, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
+  HARD:  { label:'Hard',    enemySpeed:2.0, triggerDist:600, maxSpeed:2.8, fadeRate:0.96, pingRadius:600,  pingSpeed:12, pingCost:15, dashCost:30, dashCd:60, energyDrain:0.02, enemySpawn:[2,4], itemChance:0.4, powerupChance:0.2, killEnergy:10, dropChance:0.2 },
 };
 
 const ITEM_DEFS = {
@@ -221,73 +221,67 @@ class TouchController {
   constructor(game) {
     this.game = game;
     this.joystick = { active: false, touchId: null, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0 };
-    this.joystickRadius = 60;
-    this.knobRadius = 20;
+    this.joystickRadius = 50;
+    this.knobRadius = 18;
     this.joystickHotzone = 30;
     this.buttons = [
-      { id: 'shoot', label: 'N', color: '#ff3b4a', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
-      { id: 'sonar', label: 'S', color: '#00ff96', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
-      { id: 'dash',  label: 'D', color: '#00bfff', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
+      { id: 'shoot', label: 'N', color: '#ff3b4a', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
+      { id: 'sonar', label: 'S', color: '#00ff96', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
+      { id: 'dash',  label: 'D', color: '#00bfff', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
     ];
     this.itemSlots = [
-      { type: 'shield',   touchId: null },
-      { type: 'scatter',  touchId: null },
-      { type: 'boost',    touchId: null },
-      { type: 'teleport', touchId: null },
+      { type: 'shield', touchId: null }, { type: 'scatter', touchId: null },
+      { type: 'boost', touchId: null }, { type: 'teleport', touchId: null },
     ];
     this.layout();
   }
   layout() {
-    const w = this.game.w || this.game.canvas.width, h = this.game.h || this.game.canvas.height;
-    const isLandscape = w > h;
-    const scale = isLandscape ? Math.min(h / 480, 1) : 1;
-    this.joystickRadius = Math.round(50 * scale);
-    this.knobRadius = Math.round(18 * scale);
-    this.joystickHotzone = Math.round(25 * scale);
+    const w = this.game.canvas.width, h = this.game.canvas.height;
+    const sc = Math.min(h / 480, 1);
+    this.joystickRadius = Math.round(50 * sc);
+    this.knobRadius = Math.round(18 * sc);
     const jm = this.joystickRadius + 20;
     this.joystick.baseX = jm + 10;
     this.joystick.baseY = h - jm - 10;
     this.joystick.knobX = this.joystick.baseX;
     this.joystick.knobY = this.joystick.baseY;
-    const br = Math.round(24 * scale);
-    const bGap = Math.round(48 * scale);
+    const br = Math.round(24 * sc);
+    const bGap = Math.round(46 * sc);
     this.buttons.forEach(b => b.radius = br);
     const bx = w - br - 20, by = h - br - 20;
     this.buttons[0].x = bx + bGap * 0.6; this.buttons[0].y = by;
     this.buttons[1].x = bx;               this.buttons[1].y = by - bGap;
     this.buttons[2].x = bx - bGap * 0.4;  this.buttons[2].y = by + bGap * 0.2;
-    const slotW = isLandscape ? Math.max(44, Math.round(56 * scale)) : 60;
-    const slotH = Math.max(40, Math.round(50 * scale));
-    const gap = Math.round(6 * scale);
-    const totalW = 4 * slotW + 3 * gap;
+    const slotW = Math.round(56 * sc), slotH = Math.round(50 * sc);
+    const gap = Math.round(6 * sc), totalW = 4 * slotW + 3 * gap;
     const startX = w / 2 - totalW / 2;
     for (let i = 0; i < 4; i++) {
       this.itemSlots[i].x = startX + i * (slotW + gap);
-      this.itemSlots[i].y = h - slotH - Math.round(12 * scale);
-      this.itemSlots[i].w = slotW;
-      this.itemSlots[i].h = slotH;
+      this.itemSlots[i].y = h - slotH - 12;
+      this.itemSlots[i].w = slotW; this.itemSlots[i].h = slotH;
     }
   }
   handleTouchStart(e) {
     const g = this.game;
     for (const t of e.changedTouches) {
       const tx = t.clientX, ty = t.clientY;
-      const jx = this.joystick.baseX, jy = this.joystick.baseY;
-      const jr = this.joystickRadius + this.joystickHotzone;
-      if (Math.hypot(tx - jx, ty - jy) < jr && !this.joystick.active) {
-        this.joystick.active = true; this.joystick.touchId = t.identifier;
-        this.updateJoystickPos(tx, ty); continue;
-      }
-      for (const btn of this.buttons) {
-        if (Math.hypot(tx - btn.x, ty - btn.y) < btn.radius + 12 && !btn.pressed) {
-          btn.pressed = true; btn.touchId = t.identifier; this.triggerButton(btn.id);
+      if (g.state === 'PLAYING' && !g.paused) {
+        const jx = this.joystick.baseX, jy = this.joystick.baseY;
+        if (Math.hypot(tx - jx, ty - jy) < this.joystickRadius + this.joystickHotzone && !this.joystick.active) {
+          this.joystick.active = true; this.joystick.touchId = t.identifier;
+          this.updateJoystickPos(tx, ty); continue;
         }
-      }
-      for (let i = 0; i < 4; i++) {
-        const slot = this.itemSlots[i];
-        if (tx >= slot.x && tx <= slot.x + slot.w && ty >= slot.y && ty <= slot.y + slot.h) {
-          slot.touchId = t.identifier;
-          g.activateItem(['shield','scatter','boost','teleport'][i]);
+        for (const btn of this.buttons) {
+          if (Math.hypot(tx - btn.x, ty - btn.y) < btn.radius + 12 && !btn.pressed) {
+            btn.pressed = true; btn.touchId = t.identifier; this.triggerButton(btn.id);
+          }
+        }
+        for (let i = 0; i < 4; i++) {
+          const slot = this.itemSlots[i];
+          if (tx >= slot.x && tx <= slot.x + slot.w && ty >= slot.y && ty <= slot.y + slot.h) {
+            const keys = ['shield','scatter','boost','teleport'];
+            g.activateItem(keys[i]);
+          }
         }
       }
     }
@@ -307,9 +301,6 @@ class TouchController {
       for (const btn of this.buttons) {
         if (t.identifier === btn.touchId) { btn.pressed = false; btn.touchId = null; }
       }
-      for (const slot of this.itemSlots) {
-        if (t.identifier === slot.touchId) slot.touchId = null;
-      }
     }
   }
   updateJoystickPos(tx, ty) {
@@ -324,10 +315,7 @@ class TouchController {
     const g = this.game;
     if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
     if (id === 'shoot' && g.shootCooldown <= 0) g.shoot();
-    if (id === 'sonar') {
-      const c = g.isGod() ? 0 : g.getConfig().pingCost;
-      if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; }
-    }
+    if (id === 'sonar') { const c = g.isGod() ? 0 : g.getConfig().pingCost; if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; } }
     if (id === 'dash') {
       if (g.buffs.boost.active) { g.boosting = true; }
       else { const c = g.isGod() ? 0 : g.getConfig().dashCost; if (g.dashCooldown <= 0 && g.energy >= c) g.dash(c); }
@@ -350,8 +338,8 @@ class TouchController {
       ctx.globalAlpha = btn.pressed ? 0.7 : 0.4; ctx.fillStyle = btn.color;
       ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI*2); ctx.fill();
       ctx.globalAlpha = btn.pressed ? 1 : 0.8; ctx.fillStyle = '#fff';
-      ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(btn.label, btn.x, btn.y + 5);
+      ctx.font = 'bold 12px system-ui,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(btn.label, btn.x, btn.y + 4);
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
   }
@@ -366,13 +354,12 @@ class EchoMaze {
     this.keys={};this.mouse={x:0,y:0,down:false};this.menuRects=[];
     this.menuParticles=[];this.menuButtonGlow=0;this.menuAnimating=true;
     this.menuTransition=null;
-    this.paused=false;
     this.state='MENU_MODE';
     this.mode='SURVIVAL';
     this.difficulty='NORMAL';
     this.brightMode=false;
     this.godMode=false;
-    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
+    this._autoTouch=('ontouchstart' in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
     this.controlMode=this._autoTouch?'touch':'keyboard';
     this.touchCtrl=null;
     this.rotateDismissed=false;
@@ -494,65 +481,32 @@ class EchoMaze {
   }
   updateMenuParticles() {
     if(!this.menuAnimating)return;
-    const w=this.w,h=this.h;
+    const w=this.canvas.width,h=this.canvas.height;
     for(let i=this.menuParticles.length-1;i>=0;i--){
       const p=this.menuParticles[i];p.x+=p.sx;p.y+=p.sy;p.life--;
       if(p.x<0||p.x>w)p.sx*=-1;if(p.y<0||p.y>h)p.sy*=-1;
       if(p.life<=0)this.menuParticles.splice(i,1);
     }
-    while(this.menuParticles.length<(this.controlMode==='touch'?20:45))this.spawnMenuParticle();
+    while(this.menuParticles.length<45)this.spawnMenuParticle();
   }
-  resize(){
-    this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;
-    if(this.touchCtrl)this.touchCtrl.layout();this.checkLandscape();
-  }
-  get w(){return this.canvas.width;}
-  get h(){return this.canvas.height;}
+  resize(){this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;if(this.touchCtrl)this.touchCtrl.layout();this.checkLandscape();}
   initTouchControls(){
     this.touchCtrl=new TouchController(this);
-    this.canvas.addEventListener('touchstart',e=>{
-      e.preventDefault();
-      if(this.controlMode!=='touch')return;
-      const t=e.changedTouches[0],tx=t.clientX,ty=t.clientY;
-      if(this.state==='PLAYING'&&!this.paused){
-        this.touchCtrl.handleTouchStart(e);
-      }else{
-        this.mouse.x=tx;this.mouse.y=ty;
-        this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(tx,ty,item.rect)&&item.action)item.action();});
-        if(this.state==='PLAYING'&&this.paused&&this.pointInRect(tx,ty,{x:0,y:0,w:44,h:44})){
-          this.setControlMode(this.controlMode==='touch'?'keyboard':'touch');
-        }
-      }
-    },{passive:false});
-    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchMove(e);},{passive:false});
-    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchEnd(e);},{passive:false});
+    this.canvas.addEventListener('touchstart',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchStart(e);},{passive:false});
+    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchMove(e);},{passive:false});
+    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
     this.canvas.addEventListener('touchcancel',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
     window.addEventListener('orientationchange',()=>setTimeout(()=>this.checkLandscape(),200));
     window.addEventListener('resize',()=>this.checkLandscape());
-    const dismiss=document.getElementById('rotate-dismiss');
-    if(dismiss)dismiss.addEventListener('click',()=>{this.rotateDismissed=true;this.checkLandscape();});
-    this.setupControlSwitcher();
-  }
-  setupControlSwitcher(){
-    const switcher=document.getElementById('control-switcher');if(!switcher)return;
-    switcher.querySelectorAll('.mode-btn').forEach(btn=>{
-      btn.addEventListener('click',()=>{const mode=btn.dataset.mode;if(mode)this.setControlMode(mode);});
-    });
-    this.updateSwitcherUI();
-  }
-  setControlMode(mode){this.controlMode=mode;this.updateSwitcherUI();this.checkLandscape();}
-  updateSwitcherUI(){
-    const switcher=document.getElementById('control-switcher');
-    if(switcher){switcher.querySelectorAll('.mode-btn').forEach(btn=>{btn.classList.toggle('active',btn.dataset.mode===this.controlMode);});switcher.style.display=(this.state!=='PLAYING')?'flex':'none';}
-    const ingame=document.getElementById('ingame-ctrl-toggle');
-    if(ingame)ingame.style.display=(this.state==='PLAYING')?'flex':'none';
+    const dismiss=document.getElementById('rotate-dismiss');if(dismiss)dismiss.addEventListener('click',()=>{this.rotateDismissed=true;this.checkLandscape();});
   }
   checkLandscape(){
     const overlay=document.getElementById('rotate-overlay');if(!overlay)return;
-    const isPortrait=window.innerHeight>window.innerWidth;
-    if(this.controlMode==='touch'&&isPortrait&&!this.rotateDismissed)overlay.classList.add('show');else overlay.classList.remove('show');
+    const p=window.innerHeight>window.innerWidth;
+    if(this.controlMode==='touch'&&p&&!this.rotateDismissed)overlay.classList.add('show');else overlay.classList.remove('show');
   }
   isInGameToggleArea(x,y){return x>=0&&x<=44&&y>=0&&y<=44;}
+  setControlMode(mode){this.controlMode=mode;this.checkLandscape();}
   bindEvents(){
     window.addEventListener('keydown',e=>this.onKeyDown(e));
     window.addEventListener('keyup',e=>this.onKeyUp(e));
@@ -585,7 +539,7 @@ class EchoMaze {
     if(event.key==='Escape'){
       if(this.state==='MENU_OPTIONS')this.transitionTo('MENU_DIFFICULTY');
       else if(this.state==='MENU_DIFFICULTY')this.transitionTo('MENU_MODE');
-      else if(this.state==='PLAYING'){ this.paused=!this.paused; return; }
+      else if(this.state==='PLAYING')this.state='MENU_MODE';
     }
 
     // Main menu: pick mode
@@ -612,11 +566,6 @@ class EchoMaze {
 
     // Playing
     if(this.state==='PLAYING'){
-      // Pause: only R to quit works (ESC handled above)
-      if(this.paused){
-        if(event.key.toLowerCase()==='r'){ this.paused=false; this.state='MENU_MODE'; return; }
-        return;
-      }
       // Item activation keys 1-4
       if(event.key==='1'){ this.activateItem('shield'); return; }
       if(event.key==='2'){ this.activateItem('scatter'); return; }
@@ -652,7 +601,7 @@ class EchoMaze {
     this.chunks={};this.playerPos=[CELL_SIZE*1.5,CELL_SIZE*1.5];this.playerVel=[0,0];
     this.energy=100;this.score=0;this.dashCooldown=0;this.shootCooldown=0;
     this.visibility={};this.visibilityTimer={};this.pings=[];this.enemies=[];this.bullets=[];
-    this.gameOver=false;this.won=false;this.paused=false;this.lastMoveDir=[1,0];
+    this.gameOver=false;this.won=false;this.lastMoveDir=[1,0];
     // Reset inventory & buffs
     this.inventory = { shield:0, scatter:0, boost:0, teleport:0 };
     this.buffs = { shield:{active:false,timer:0}, scatter:{active:false,shotsFired:0}, boost:{active:false,timer:0}, teleport:{active:false} };
@@ -665,6 +614,39 @@ class EchoMaze {
     if(this.mode==='LEVEL')this.goalPos=[this.randInt(15,25)*CELL_SIZE,this.randInt(15,25)*CELL_SIZE];
   }
   randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+
+  getChunk(gx,gy){
+    const cx=floorDiv(gx,CHUNK_SIZE),cy=floorDiv(gy,CHUNK_SIZE),key=`${cx},${cy}`;
+    if(!this.chunks[key]){
+      const seed=this.seed+cx*1000+cy;
+      this.chunks[key]=new Chunk(cx,cy,this.difficulty,seed);
+      const sp=new SeededRandom(seed), cfg=this.getConfig();
+      let cnt=sp.randInt(cfg.enemySpawn[0],cfg.enemySpawn[1]);
+      const safeR=3,psgx=floorDiv(this.playerPos[0],CELL_SIZE),psgy=floorDiv(this.playerPos[1],CELL_SIZE);
+      for(let cr=0,at=0;cr<cnt&&at<cnt*6;at++){
+        const lx=sp.randInt(0,CHUNK_SIZE-1),ly=sp.randInt(0,CHUNK_SIZE-1);
+        const wx=cx*CHUNK_SIZE+lx,wy=cy*CHUNK_SIZE+ly;
+        if(Math.abs(wx-psgx)<=safeR&&Math.abs(wy-psgy)<=safeR)continue;
+        this.enemies.push(new Enemy(wx*CELL_SIZE+CELL_SIZE/2,wy*CELL_SIZE+CELL_SIZE/2,cfg));cr++;
+      }
+    }
+    return this.chunks[key];
+  }
+
+  checkCollision(pos, isDashing=false){
+    const gx=floorDiv(pos[0],CELL_SIZE),gy=floorDiv(pos[1],CELL_SIZE);
+    const lx=((gx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE,ly=((gy%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+    const chunk=this.getChunk(gx,gy),cell=chunk.cells[`${lx},${ly}`];
+    if(!cell)return pos;
+    const cx=gx*CELL_SIZE,cy=gy*CELL_SIZE,p=15,np=[pos[0],pos[1]];
+    if(isDashing){if(cell.walls[0]&&pos[1]<cy)cell.walls[0]=false;if(cell.walls[2]&&pos[1]>cy+CELL_SIZE)cell.walls[2]=false;if(cell.walls[3]&&pos[0]<cx)cell.walls[3]=false;if(cell.walls[1]&&pos[0]>cx+CELL_SIZE)cell.walls[1]=false;return np;}
+    if(cell.walls[0]&&pos[1]<cy+p)np[1]=cy+p;
+    if(cell.walls[2]&&pos[1]>cy+CELL_SIZE-p)np[1]=cy+CELL_SIZE-p;
+    if(cell.walls[3]&&pos[0]<cx+p)np[0]=cx+p;
+    if(cell.walls[1]&&pos[0]>cx+CELL_SIZE-p)np[0]=cx+CELL_SIZE-p;
+    return np;
+  }
+
   saveGame(){
     const d={playerPos:this.playerPos,energy:this.energy,score:this.score,seed:this.seed,mode:this.mode,difficulty:this.difficulty,brightMode:this.brightMode,godMode:this.godMode,visibility:this.visibility,visibilityTimer:this.visibilityTimer,goalPos:this.goalPos||null,
       inventory:this.inventory, buffs:this.buffs, groundItems:this.groundItems};
@@ -728,7 +710,6 @@ class EchoMaze {
 
   update(){
     if(this.state!=='PLAYING')return;
-    if(this.paused)return;
     if(this.gameOver||this.won){
       if(this.mode==='WATCH'&&!this.restartTimer)this.restartTimer=performance.now();
       if(this.mode==='WATCH'&&this.restartTimer&&performance.now()-this.restartTimer>1500){this.restartTimer=null;this.resetGame();this.gameOver=false;this.won=false;}
@@ -745,8 +726,8 @@ class EchoMaze {
     this.playerVel[0]+=ax;this.playerVel[1]+=ay;
     if(ax===0)this.playerVel[0]*=fric;if(ay===0)this.playerVel[1]*=fric;
     let ms=cfg.maxSpeed;
-    // Boost: +80% max speed when shift held and boost active
-    if (this.boosting && this.buffs.boost.active) ms *= 1.8;
+    // Boost: +40% max speed when shift held and boost active
+    if (this.boosting && this.buffs.boost.active) ms *= 1.4;
     this.effectiveMaxSpeed = ms;
     this.lastAccel = [ax, ay];
     const spd=Math.hypot(this.playerVel[0],this.playerVel[1]);
@@ -862,7 +843,7 @@ class EchoMaze {
   revealArea(pos,radius){for(let i=0;i<100;i++){const a=(i/100)*Math.PI*2,rx=pos[0]+Math.cos(a)*radius,ry=pos[1]+Math.sin(a)*radius,gx=floorDiv(rx,CELL_SIZE),gy=floorDiv(ry,CELL_SIZE);this.visibility[`${gx},${gy}`]=1.0;this.visibilityTimer[`${gx},${gy}`]=60;}}
 
   draw() {
-    const ctx=this.ctx,w=this.w,h=this.h;ctx.clearRect(0,0,w,h);
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;ctx.clearRect(0,0,w,h);
     if(this.state!=='PLAYING'){this.drawMenu();return;}
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     let shakeX = 0, shakeY = 0;
@@ -961,26 +942,6 @@ class EchoMaze {
     });
     ctx.globalAlpha = 1;
     if(this.mode==='LEVEL'&&!this.gameOver&&!this.won)this.drawEdgeGoalArrow(w,h);
-    // In-game control toggle
-    if(this.state==='PLAYING'){
-      ctx.fillStyle='rgba(13,18,32,0.7)';ctx.beginPath();ctx.arc(20,20,16,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle='#3a8fa8';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(20,20,16,0,Math.PI*2);ctx.stroke();
-      ctx.fillStyle='#58c4dd';ctx.font='12px system-ui,sans-serif';ctx.textAlign='center';
-      ctx.fillText(this.controlMode==='touch'?'📱':'⌨️',20,24);ctx.textAlign='left';
-    }
-    // Touch controls
-    if(this.controlMode==='touch'&&this.state==='PLAYING'&&!this.paused)this.touchCtrl.draw(ctx);
-    // Pause overlay
-    if(this.paused&&!this.gameOver&&!this.won){
-      ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,w,h);
-      ctx.fillStyle=COLORS.accent;ctx.font='bold 52px system-ui,sans-serif';ctx.textAlign='center';
-      const pw='PAUSED',ptw=ctx.measureText(pw).width;
-      ctx.fillText(pw,w/2-ptw/2,h/2-10);
-      ctx.fillStyle=COLORS.text;ctx.font='18px system-ui,sans-serif';
-      const ph='ESC to resume  ·  R to quit',phw=ctx.measureText(ph).width;
-      ctx.fillText(ph,w/2-phw/2,h/2+30);
-      ctx.textAlign='left';
-    }
     if(this.gameOver||this.won){
       ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,w,h);
       ctx.fillStyle=this.won?COLORS.goal:COLORS.enemy;ctx.font='bold 52px system-ui,sans-serif';
@@ -1015,15 +976,12 @@ class EchoMaze {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   drawInventory() {
-    const ctx = this.ctx, w = this.w, h = this.h;
+    const ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
     let slotW, slotH, gap, startX, y;
     if(this.controlMode==='touch'&&this.touchCtrl){
-      const ts=this.touchCtrl.itemSlots;
-      startX=ts[0].x; y=ts[0].y; slotW=ts[0].w; slotH=ts[0].h;
-      gap=(ts[1].x-ts[0].x-slotW);
+      const ts=this.touchCtrl.itemSlots;startX=ts[0].x;y=ts[0].y;slotW=ts[0].w;slotH=ts[0].h;gap=ts[1].x-ts[0].x-slotW;
     }else{
-      slotW=70; slotH=56; gap=8; const totalW=4*slotW+3*gap;
-      startX=w/2-totalW/2; y=h-slotH-24;
+      slotW=70;slotH=56;gap=8;const totalW=4*slotW+3*gap;startX=w/2-totalW/2;y=h-slotH-24;
     }
     ITEM_KEYS.forEach((type, i) => {
       const x = startX + i*(slotW+gap);
@@ -1074,17 +1032,16 @@ class EchoMaze {
   }
 
   drawMenu() {
-    this.updateSwitcherUI();
-    const ctx=this.ctx,w=this.w,h=this.h,t=performance.now()/1000;
+    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,t=performance.now()/1000;
+    const switcher=document.getElementById('control-switcher');if(switcher)switcher.style.display='flex';
+    const ingame=document.getElementById('ingame-ctrl-toggle');if(ingame)ingame.style.display='none';
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     this.updateMenuParticles();
     this.menuParticles.forEach(p=>{const a=p.life/p.ml;ctx.fillStyle=p.color;ctx.globalAlpha=0.75*a;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,p.size*a),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0;});
     for(let i=0;i<3;i++){const rad=220+i*140+Math.sin(t+i)*40;ctx.strokeStyle=`rgba(88,196,221,${Math.max(0,0.12-i*0.04)})`;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(w/2,h/2,rad,0,Math.PI*2);ctx.stroke();}
-    const cx=w/2,compact=h<500,by=compact?h*0.12:h/4-20;
-    const tSize=compact?Math.round(36*(h/500)):56,sSize=compact?Math.round(16*(h/500)):22;
-    ctx.textAlign='center';
-    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font=`bold ${tSize}px system-ui,sans-serif`;ctx.fillText('Echo Maze',cx,by);ctx.restore();
-    ctx.fillStyle=COLORS.accentDim;ctx.font=`${sSize}px system-ui,sans-serif`;ctx.fillText('Combat Edition',cx,by+Math.round(tSize*1.05));
+    const cx=w/2,by=h/4-20;ctx.textAlign='center';
+    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font='bold 56px system-ui,sans-serif';ctx.fillText('Echo Maze',cx,by);ctx.restore();
+    ctx.fillStyle=COLORS.accentDim;ctx.font='22px system-ui,sans-serif';ctx.fillText('Combat Edition',cx,by+58);
 
     if (this.menuTransition) {
       this.menuRects = [];
@@ -1112,58 +1069,45 @@ class EchoMaze {
 
   drawMenuContent(state, cx, by, w, h) {
     const ctx = this.ctx;
-    const compact = h < 500;
-    const tScale = compact ? Math.max(0.7, h / 500) : 1;
-    const titleFont = Math.round(18 * tScale);
-    const hintFont = Math.round(13 * tScale);
-    let bottomY = h - 20;
-
-    // Shared: start Y for content area
-    const startY = by + Math.round(100 * tScale);
-    const titleY = startY;
+    let bottomY = h - 40;
 
     if (state === 'MENU_MODE') {
-      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;ctx.fillText('SELECT GAME MODE',cx,titleY);
-      const btnW=Math.min(480,w*0.55), btnH=Math.round(40*tScale);
-      const gap=Math.round(50*tScale);
+      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';ctx.fillText('SELECT GAME MODE',cx,by+120);
+      const bw=Math.min(500,w*0.55), gap=62;
       const btns=[
         {label:'1. Survival',action:()=>{this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'2. Level',action:()=>{this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}},
         {label:'L. Load Game',action:()=>this.loadGame()},
       ];
-      const btnStartY=titleY+Math.round(28*tScale);
-      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,btnStartY+i*gap,btnW,btnH,item.label,item.action);});
-      bottomY=btnStartY+btns.length*gap+Math.round(20*tScale);
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText(compact?'Tap or press key':'Click or press key — ESC to return',cx,bottomY);
+      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
+      bottomY=by+160+btns.length*gap+50;
+      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('Click or press key — ESC to return',cx,bottomY);
     }
     else if (state === 'MENU_DIFFICULTY') {
-      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;
-      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,titleY);
-      const btnW=Math.min(420,w*0.5), btnH=Math.round(40*tScale);
-      const gap=Math.round(50*tScale);
+      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
+      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,by+120);
+      const bw=Math.min(440,w*0.5), gap=62;
       const diffs=[
         {label:'1. Easy',action:()=>{this.difficulty='EASY';this.transitionTo('MENU_OPTIONS');}},
         {label:'2. Normal',action:()=>{this.difficulty='NORMAL';this.transitionTo('MENU_OPTIONS');}},
         {label:'3. Hard',action:()=>{this.difficulty='HARD';this.transitionTo('MENU_OPTIONS');}},
       ];
-      const btnStartY=titleY+Math.round(28*tScale);
-      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,btnStartY+i*gap,btnW,btnH,item.label,item.action);});
-      bottomY=btnStartY+diffs.length*gap+Math.round(20*tScale);
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText('ESC to go back',cx,bottomY);
+      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
+      bottomY=by+160+diffs.length*gap+50;
+      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('ESC to go back',cx,bottomY);
     }
     else if (state === 'MENU_OPTIONS') {
       const ml=this.mode==='SURVIVAL'?'Survival':'Level';
-      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;
-      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,titleY);
-      const tw=Math.min(340,w*0.5), ty=titleY+Math.round(28*tScale), tcx=cx-tw/2;
-      const toggleH=Math.round(40*tScale);
-      this.drawToggle(ctx,tcx,ty,tw,toggleH,'Bright Mode',this.brightMode,()=>this.brightMode=!this.brightMode);
-      this.drawToggle(ctx,tcx,ty+toggleH+Math.round(8*tScale),tw,toggleH,'God Mode',this.godMode,()=>this.godMode=!this.godMode);
-      const startW=Math.round(200*tScale);
-      this.drawMenuButton(ctx,cx,ty+toggleH*2+Math.round(30*tScale),startW,Math.round(38*tScale),'Start Game',()=>{this.state='PLAYING';this.resetGame();});
-      bottomY=ty+toggleH*2+Math.round(80*tScale);
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText(compact?'Tap to start':'SPACE/ENTER — 1/2 toggle — ESC back',cx,bottomY);
+      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
+      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,by+120);
+      const tw=360, ty=by+175, tcx=cx-tw/2;
+      this.drawToggle(ctx,tcx,ty,'Bright Mode (full visibility)',this.brightMode,()=>this.brightMode=!this.brightMode);
+      this.drawToggle(ctx,tcx,ty+56,'God Mode (infinite energy)',this.godMode,()=>this.godMode=!this.godMode);
+      const startW=240;
+      this.drawMenuButton(ctx,cx,ty+140,startW,44,'Start Game',()=>{this.state='PLAYING';this.resetGame();});
+      bottomY=ty+200;
+      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);
     }
   }
 
@@ -1178,13 +1122,13 @@ class EchoMaze {
     ctx.quadraticCurveTo(lx+w,y+lift+h,lx+w-radius,y+lift+h);ctx.lineTo(lx+radius,y+lift+h);
     ctx.quadraticCurveTo(lx,y+lift+h,lx,y+lift+h-radius);ctx.lineTo(lx,y+lift+radius);
     ctx.quadraticCurveTo(lx,y+lift,lx+radius,y+lift);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font='bold 13px system-ui,sans-serif';
+    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font='bold 14px system-ui,sans-serif';
     ctx.fillText(label,x,y+lift+h/2+5);
     this.menuRects.push({rect:{x:lx,y,w,h},action});
   }
 
-  drawToggle(ctx, x, y, w, h, label, on, action){
-    const radius=8, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
+  drawToggle(ctx, x, y, label, on, action){
+    const w=360,h=42,radius=8, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
     const lift=hover?-2:0;
     ctx.fillStyle=on?'rgba(88,196,221,0.08)':hover?'rgba(255,255,255,0.03)':COLORS.panel;
     ctx.strokeStyle=on?COLORS.accent:hover?'#3a3f50':'#2a2f40';
@@ -1281,19 +1225,7 @@ class EchoMaze {
     ctx.globalAlpha = 1;
   }
 
-  frame(timestamp){
-    if (!this._lastFrame) this._lastFrame = timestamp;
-    const elapsed = timestamp - this._lastFrame;
-    this._lastFrame = timestamp;
-    this._acc = (this._acc || 0) + elapsed;
-    const TICK = 16.6667;
-    while (this._acc >= TICK) {
-      this.update();
-      this._acc -= TICK;
-    }
-    this.draw();
-    requestAnimationFrame(t=>this.frame(t));
-  }
+  frame(timestamp){this.update();this.draw();requestAnimationFrame(t=>this.frame(t));}
 }
 
 window.addEventListener('load',()=>{new EchoMaze();});
