@@ -11,22 +11,6 @@
     <canvas id="game-canvas"></canvas>
   </div>
 
-  <!-- Portrait lock overlay (shown in touch mode when phone is portrait) -->
-  <div id="rotate-overlay">
-    <div id="rotate-icon">🔄</div>
-    <div id="rotate-text">请旋转手机至横屏模式</div>
-    <button id="rotate-dismiss">我知道了，继续竖屏</button>
-  </div>
-
-  <!-- Control Mode Switcher (menu top-left) -->
-  <div id="control-switcher">
-    <button class="mode-btn active" data-mode="touch">📱 触屏</button>
-    <button class="mode-btn" data-mode="keyboard">⌨️ 键鼠</button>
-  </div>
-
-  <!-- In-game control toggle (shown during play) -->
-  <button id="ingame-ctrl-toggle" title="切换操控模式"></button>
-
   <!-- Help Button -->
   <button id="help-btn" title="功能介绍">?</button>
 
@@ -93,6 +77,8 @@
     </div>
   </div>
 
+  <div id="rotate-overlay"><div id="rotate-icon">🔄</div><div id="rotate-text">请旋转手机至横屏模式</div><button id="rotate-dismiss">我知道了，继续竖屏</button></div>
+  <button id="ctrl-toggle-btn" title="切换操控">📱</button>
   <script src="game.js"></script>
 </body>
 </html>

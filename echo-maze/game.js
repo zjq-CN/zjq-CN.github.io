@@ -29,9 +29,9 @@ const COLORS = {
 
 // Difficulty config: used when brightMode=false and godMode=false
 const DIFFICULTY_CONFIG = {
-  EASY:  { label:'Easy',    enemySpeed:1.2, triggerDist:400, maxSpeed:3.2, fadeRate:0.98, pingRadius:800,  pingSpeed:15, pingCost:8,  dashCost:20, dashCd:40, energyDrain:0.02, enemySpawn:[1,2], itemChance:0.6, powerupChance:0.4, killEnergy:15, dropChance:0.35 },
-  NORMAL:{ label:'Normal',  enemySpeed:1.6, triggerDist:500, maxSpeed:3.0, fadeRate:0.97, pingRadius:700,  pingSpeed:14, pingCost:12, dashCost:25, dashCd:50, energyDrain:0.02, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
-  HARD:  { label:'Hard',    enemySpeed:2.0, triggerDist:600, maxSpeed:2.8, fadeRate:0.96, pingRadius:600,  pingSpeed:12, pingCost:15, dashCost:30, dashCd:60, energyDrain:0.02, enemySpawn:[2,4], itemChance:0.4, powerupChance:0.2, killEnergy:10, dropChance:0.2 },
+  EASY:  { label:'Easy',    enemySpeed:0.7, triggerDist:250, maxSpeed:3.8, fadeRate:0.995, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
+  NORMAL:{ label:'Normal',  enemySpeed:1.5, triggerDist:450, maxSpeed:3.0, fadeRate:0.99, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
+  HARD:  { label:'Hard',    enemySpeed:2.5, triggerDist:800, maxSpeed:2.8, fadeRate:0.985, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
 };
 
 const ITEM_DEFS = {
@@ -217,131 +217,208 @@ class AiPlayer {
 }
 
 
-class TouchController {
-  constructor(game) {
-    this.game = game;
-    this.joystick = { active: false, touchId: null, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0 };
-    this.joystickRadius = 50;
-    this.knobRadius = 18;
-    this.joystickHotzone = 30;
-    this.buttons = [
-      { id: 'shoot', label: 'N', color: '#ff3b4a', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
-      { id: 'sonar', label: 'S', color: '#00ff96', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
-      { id: 'dash',  label: 'D', color: '#00bfff', touchId: null, pressed: false, x: 0, y: 0, radius: 24 },
+// ─── Touch Controls (mobile overlay - independent of game logic) ───
+class TouchControls {
+  constructor(g) {
+    this.g = g;
+    this.mode = 'keyboard'; // 'touch' | 'keyboard'
+    this.j = { active: false, tid: null, bx: 0, by: 0, kx: 0, ky: 0, dx: 0, dy: 0, r: 50, kr: 18 };
+    this.btns = [
+      { id: 'shoot', c: '#ff3b4a', l: 'N', tid: null, down: false, x: 0, y: 0, r: 24 },
+      { id: 'ping',  c: '#00ff96', l: 'S', tid: null, down: false, x: 0, y: 0, r: 24 },
+      { id: 'dash',  c: '#00bfff', l: 'D', tid: null, down: false, x: 0, y: 0, r: 24 },
     ];
-    this.itemSlots = [
-      { type: 'shield', touchId: null }, { type: 'scatter', touchId: null },
-      { type: 'boost', touchId: null }, { type: 'teleport', touchId: null },
-    ];
-    this.layout();
+    this._detect();
+    this._layout();
+    this._bind();
   }
-  layout() {
-    const w = this.game.canvas.width, h = this.game.canvas.height;
-    const sc = Math.min(h / 480, 1);
-    this.joystickRadius = Math.round(50 * sc);
-    this.knobRadius = Math.round(18 * sc);
-    const jm = this.joystickRadius + 20;
-    this.joystick.baseX = jm + 10;
-    this.joystick.baseY = h - jm - 10;
-    this.joystick.knobX = this.joystick.baseX;
-    this.joystick.knobY = this.joystick.baseY;
-    const br = Math.round(24 * sc);
-    const bGap = Math.round(46 * sc);
-    this.buttons.forEach(b => b.radius = br);
+
+  _detect() {
+    if (('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 1024)
+      this.mode = 'touch';
+  }
+
+  setMode(m) { this.mode = m; this._layout(); this._checkLandscape(); }
+
+  _bind() {
+    const c = this.g.canvas;
+    c.addEventListener('touchstart', e => { e.preventDefault(); this._onTS(e); }, { passive: false });
+    c.addEventListener('touchmove',  e => { e.preventDefault(); this._onTM(e); }, { passive: false });
+    c.addEventListener('touchend',   e => { e.preventDefault(); this._onTE(e); }, { passive: false });
+    c.addEventListener('touchcancel', e => { e.preventDefault(); this._onTE(e); }, { passive: false });
+    window.addEventListener('orientationchange', () => setTimeout(() => this._checkLandscape(), 200));
+    window.addEventListener('resize', () => this._layout());
+    const d = document.getElementById('rotate-dismiss');
+    if (d) d.addEventListener('click', () => { this._dismissed = true; this._checkLandscape(); });
+    const tgl = document.getElementById('ctrl-toggle-btn');
+    if (tgl) tgl.addEventListener('click', () => {
+      this.setMode(this.mode === 'touch' ? 'keyboard' : 'touch');
+      tgl.textContent = this.mode === 'touch' ? '📱' : '⌨️';
+    });
+  }
+
+  _checkLandscape() {
+    const o = document.getElementById('rotate-overlay');
+    if (!o) return;
+    if (this.mode === 'touch' && window.innerHeight > window.innerWidth && !this._dismissed)
+      o.classList.add('show');
+    else
+      o.classList.remove('show');
+  }
+
+  _layout() {
+    const w = this.g.canvas.width, h = this.g.canvas.height;
+    const sc = Math.min(h / 500, 1);
+    this.j.r = Math.round(50 * sc); this.j.kr = Math.round(18 * sc);
+    const jm = this.j.r + 20;
+    this.j.bx = jm + 10; this.j.by = h - jm - 10; this.j.kx = this.j.bx; this.j.ky = this.j.by;
+    this.j.dx = 0; this.j.dy = 0;
+    const br = Math.round(24 * sc), bg = Math.round(46 * sc);
+    this.btns.forEach(b => b.r = br);
     const bx = w - br - 20, by = h - br - 20;
-    this.buttons[0].x = bx + bGap * 0.6; this.buttons[0].y = by;
-    this.buttons[1].x = bx;               this.buttons[1].y = by - bGap;
-    this.buttons[2].x = bx - bGap * 0.4;  this.buttons[2].y = by + bGap * 0.2;
-    const slotW = Math.round(56 * sc), slotH = Math.round(50 * sc);
-    const gap = Math.round(6 * sc), totalW = 4 * slotW + 3 * gap;
-    const startX = w / 2 - totalW / 2;
-    for (let i = 0; i < 4; i++) {
-      this.itemSlots[i].x = startX + i * (slotW + gap);
-      this.itemSlots[i].y = h - slotH - 12;
-      this.itemSlots[i].w = slotW; this.itemSlots[i].h = slotH;
-    }
+    this.btns[0].x = bx + bg * 0.6; this.btns[0].y = by;
+    this.btns[1].x = bx;             this.btns[1].y = by - bg;
+    this.btns[2].x = bx - bg * 0.4;  this.btns[2].y = by + bg * 0.2;
+    this._checkLandscape();
   }
-  handleTouchStart(e) {
-    const g = this.game;
+
+  _onTS(e) {
+    if (this.mode !== 'touch') return;
+    const g = this.g;
     for (const t of e.changedTouches) {
       const tx = t.clientX, ty = t.clientY;
-      if (g.state === 'PLAYING' && !g.paused) {
-        const jx = this.joystick.baseX, jy = this.joystick.baseY;
-        if (Math.hypot(tx - jx, ty - jy) < this.joystickRadius + this.joystickHotzone && !this.joystick.active) {
-          this.joystick.active = true; this.joystick.touchId = t.identifier;
-          this.updateJoystickPos(tx, ty); continue;
-        }
-        for (const btn of this.buttons) {
-          if (Math.hypot(tx - btn.x, ty - btn.y) < btn.radius + 12 && !btn.pressed) {
-            btn.pressed = true; btn.touchId = t.identifier; this.triggerButton(btn.id);
-          }
-        }
-        for (let i = 0; i < 4; i++) {
-          const slot = this.itemSlots[i];
-          if (tx >= slot.x && tx <= slot.x + slot.w && ty >= slot.y && ty <= slot.y + slot.h) {
-            const keys = ['shield','scatter','boost','teleport'];
-            g.activateItem(keys[i]);
-          }
+      if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) continue;
+      // Joystick
+      if (!this.j.active && Math.hypot(tx - this.j.bx, ty - this.j.by) < this.j.r + 30) {
+        this.j.active = true; this.j.tid = t.identifier;
+        this._moveStick(tx, ty); continue;
+      }
+      // Buttons
+      for (const b of this.btns) {
+        if (!b.down && Math.hypot(tx - b.x, ty - b.y) < b.r + 12) {
+          b.down = true; b.tid = t.identifier; this._fireBtn(b.id);
         }
       }
+      // Item slots (bottom center)
+      this._tryItemSlot(tx, ty);
     }
   }
-  handleTouchMove(e) {
+
+  _tryItemSlot(tx, ty) {
+    const g = this.g, w = g.canvas.width, h = g.canvas.height;
+    const slotW = 56, slotH = 50, gap = 8, totalW = 4 * slotW + 3 * gap;
+    const sx = w / 2 - totalW / 2, sy = h - slotH - 12;
+    const keys = ['shield', 'scatter', 'boost', 'teleport'];
+    for (let i = 0; i < 4; i++) {
+      const x = sx + i * (slotW + gap);
+      if (tx >= x && tx <= x + slotW && ty >= sy && ty <= sy + slotH)
+        g.activateItem(keys[i]);
+    }
+  }
+
+  _onTM(e) {
+    for (const t of e.changedTouches)
+      if (t.identifier === this.j.tid) this._moveStick(t.clientX, t.clientY);
+  }
+
+  _onTE(e) {
     for (const t of e.changedTouches) {
-      if (t.identifier === this.joystick.touchId) this.updateJoystickPos(t.clientX, t.clientY);
-    }
-  }
-  handleTouchEnd(e) {
-    for (const t of e.changedTouches) {
-      if (t.identifier === this.joystick.touchId) {
-        this.joystick.active = false; this.joystick.touchId = null;
-        this.joystick.knobX = this.joystick.baseX; this.joystick.knobY = this.joystick.baseY;
-        this.joystick.dx = 0; this.joystick.dy = 0;
+      if (t.identifier === this.j.tid) {
+        this.j.active = false; this.j.tid = null;
+        this.j.kx = this.j.bx; this.j.ky = this.j.by; this.j.dx = 0; this.j.dy = 0;
       }
-      for (const btn of this.buttons) {
-        if (t.identifier === btn.touchId) { btn.pressed = false; btn.touchId = null; }
+      for (const b of this.btns) {
+        if (t.identifier === b.tid) { b.down = false; b.tid = null; }
       }
     }
   }
-  updateJoystickPos(tx, ty) {
-    const jx = this.joystick.baseX, jy = this.joystick.baseY;
-    let dx = tx - jx, dy = ty - jy;
-    const dist = Math.hypot(dx, dy), maxR = this.joystickRadius;
-    if (dist > maxR) { dx = (dx / dist) * maxR; dy = (dy / dist) * maxR; }
-    this.joystick.knobX = jx + dx; this.joystick.knobY = jy + dy;
-    this.joystick.dx = dx / maxR; this.joystick.dy = dy / maxR;
+
+  _moveStick(tx, ty) {
+    let dx = tx - this.j.bx, dy = ty - this.j.by;
+    const d = Math.hypot(dx, dy);
+    if (d > this.j.r) { dx = dx / d * this.j.r; dy = dy / d * this.j.r; }
+    this.j.kx = this.j.bx + dx; this.j.ky = this.j.by + dy;
+    this.j.dx = dx / this.j.r; this.j.dy = dy / this.j.r;
   }
-  triggerButton(id) {
-    const g = this.game;
-    if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
+
+  _fireBtn(id) {
+    const g = this.g;
     if (id === 'shoot' && g.shootCooldown <= 0) g.shoot();
-    if (id === 'sonar') { const c = g.isGod() ? 0 : g.getConfig().pingCost; if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; } }
+    if (id === 'ping') {
+      const c = g.isGod() ? 0 : g.getConfig().pingCost;
+      if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; }
+    }
     if (id === 'dash') {
       if (g.buffs.boost.active) { g.boosting = true; }
-      else { const c = g.isGod() ? 0 : g.getConfig().dashCost; if (g.dashCooldown <= 0 && g.energy >= c) g.dash(c); }
+      else {
+        const c = g.isGod() ? 0 : g.getConfig().dashCost;
+        if (g.dashCooldown <= 0 && g.energy >= c) g.dash(c);
+      }
     }
   }
-  applyMovement() {
-    const g = this.game;
+
+  applyInput() {
+    if (this.mode !== 'touch') return;
+    const g = this.g;
     if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
-    const accel = 0.28, deadzone = 0.15;
-    if (Math.abs(this.joystick.dx) > deadzone) g.playerVel[0] += this.joystick.dx * accel * 1.2;
-    if (Math.abs(this.joystick.dy) > deadzone) g.playerVel[1] += this.joystick.dy * accel * 1.2;
+    if (!this.j.active) {
+      g.keys['w'] = g.keys['w'] || false; g.keys['a'] = g.keys['a'] || false;
+      g.keys['s'] = g.keys['s'] || false; g.keys['d'] = g.keys['d'] || false;
+      return;
+    }
+    const dz = 0.25, jx = this.j.dx, jy = this.j.dy;
+    if (jy < -dz) g.keys['w'] = true;
+    if (jy > dz)  g.keys['s'] = true;
+    if (jx < -dz) g.keys['a'] = true;
+    if (jx > dz)  g.keys['d'] = true;
   }
+
   draw(ctx) {
-    if (this.game.state !== 'PLAYING' || this.game.paused) return;
+    if (this.mode !== 'touch') return;
+    const g = this.g;
+    if (g.state !== 'PLAYING' || g.paused) return;
+    // Toggle button
+    ctx.fillStyle = 'rgba(13,18,32,0.7)';
+    ctx.beginPath(); ctx.arc(20, 20, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#3a8fa8'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(20, 20, 16, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#58c4dd'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('📱', 20, 24); ctx.textAlign = 'left';
+    // Joystick
     ctx.globalAlpha = 0.3; ctx.strokeStyle = '#58c4dd'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(this.joystick.baseX, this.joystick.baseY, this.joystickRadius, 0, Math.PI*2); ctx.stroke();
-    ctx.globalAlpha = this.joystick.active ? 0.6 : 0.35; ctx.fillStyle = '#58c4dd';
-    ctx.beginPath(); ctx.arc(this.joystick.knobX, this.joystick.knobY, this.knobRadius, 0, Math.PI*2); ctx.fill();
-    for (const btn of this.buttons) {
-      ctx.globalAlpha = btn.pressed ? 0.7 : 0.4; ctx.fillStyle = btn.color;
-      ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI*2); ctx.fill();
-      ctx.globalAlpha = btn.pressed ? 1 : 0.8; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(this.j.bx, this.j.by, this.j.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = this.j.active ? 0.6 : 0.35; ctx.fillStyle = '#58c4dd';
+    ctx.beginPath(); ctx.arc(this.j.kx, this.j.ky, this.j.kr, 0, Math.PI * 2); ctx.fill();
+    // Buttons
+    for (const b of this.btns) {
+      ctx.globalAlpha = b.down ? 0.7 : 0.4; ctx.fillStyle = b.c;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = b.down ? 1 : 0.8; ctx.fillStyle = '#fff';
       ctx.font = 'bold 12px system-ui,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(btn.label, btn.x, btn.y + 4);
+      ctx.fillText(b.l, b.x, b.y + 4);
     }
     ctx.globalAlpha = 1; ctx.textAlign = 'left';
+    // Item slots
+    const w = g.canvas.width, h = g.canvas.height;
+    const slotW = 56, slotH = 50, gap = 8, totalW = 4 * slotW + 3 * gap;
+    const sx = w / 2 - totalW / 2, sy = h - slotH - 12;
+    const keys = ['shield','scatter','boost','teleport'];
+    keys.forEach((type, i) => {
+      if (!g.inventory || g.inventory[type] < 1) return;
+      const x = sx + i * (slotW + gap), isActive = g.inventory[type] === 2;
+      ctx.fillStyle = isActive ? 'rgba(255,255,255,0.13)' : '#111522';
+      ctx.strokeStyle = isActive ? '#58c4dd' : '#1e2640';
+      ctx.lineWidth = isActive ? 2 : 1;
+      const r = 6;
+      ctx.beginPath(); ctx.moveTo(x+r,sy); ctx.lineTo(x+slotW-r,sy);
+      ctx.quadraticCurveTo(x+slotW,sy,x+slotW,sy+r); ctx.lineTo(x+slotW,sy+slotH-r);
+      ctx.quadraticCurveTo(x+slotW,sy+slotH,x+slotW-r,sy+slotH); ctx.lineTo(x+r,sy+slotH);
+      ctx.quadraticCurveTo(x,sy+slotH,x,sy+slotH-r); ctx.lineTo(x,sy+r);
+      ctx.quadraticCurveTo(x,sy,x+r,sy); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#58c4dd'; ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(String(i+1), x + 14, sy + slotH - 14);
+    });
+    ctx.textAlign = 'left';
   }
 }
 
@@ -359,10 +436,7 @@ class EchoMaze {
     this.difficulty='NORMAL';
     this.brightMode=false;
     this.godMode=false;
-    this._autoTouch=('ontouchstart' in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
-    this.controlMode=this._autoTouch?'touch':'keyboard';
-    this.touchCtrl=null;
-    this.rotateDismissed=false;
+    this.tc=null;
     this.aiPlayer=new AiPlayer();
     this.message='';this.messageTimer=0;
     this.seed=Math.floor(Math.random()*1_000_000);
@@ -380,7 +454,7 @@ class EchoMaze {
     // --- end NEW ---
     this.resetGame();
     this.bindEvents();
-    this.initTouchControls();
+    this.tc=new TouchControls(this);
     requestAnimationFrame(t=>this.frame(t));
   }
 
@@ -489,24 +563,7 @@ class EchoMaze {
     }
     while(this.menuParticles.length<45)this.spawnMenuParticle();
   }
-  resize(){this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;if(this.touchCtrl)this.touchCtrl.layout();this.checkLandscape();}
-  initTouchControls(){
-    this.touchCtrl=new TouchController(this);
-    this.canvas.addEventListener('touchstart',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchStart(e);},{passive:false});
-    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchMove(e);},{passive:false});
-    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
-    this.canvas.addEventListener('touchcancel',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
-    window.addEventListener('orientationchange',()=>setTimeout(()=>this.checkLandscape(),200));
-    window.addEventListener('resize',()=>this.checkLandscape());
-    const dismiss=document.getElementById('rotate-dismiss');if(dismiss)dismiss.addEventListener('click',()=>{this.rotateDismissed=true;this.checkLandscape();});
-  }
-  checkLandscape(){
-    const overlay=document.getElementById('rotate-overlay');if(!overlay)return;
-    const p=window.innerHeight>window.innerWidth;
-    if(this.controlMode==='touch'&&p&&!this.rotateDismissed)overlay.classList.add('show');else overlay.classList.remove('show');
-  }
-  isInGameToggleArea(x,y){return x>=0&&x<=44&&y>=0&&y<=44;}
-  setControlMode(mode){this.controlMode=mode;this.checkLandscape();}
+  resize(){this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;if(this.tc)this.tc._layout();}
   bindEvents(){
     window.addEventListener('keydown',e=>this.onKeyDown(e));
     window.addEventListener('keyup',e=>this.onKeyUp(e));
@@ -523,7 +580,8 @@ class EchoMaze {
   onMouseMove(e){const r=this.canvas.getBoundingClientRect();this.mouse.x=e.clientX-r.left;this.mouse.y=e.clientY-r.top;}
   onMouseDown(e){
     const x=this.mouse.x,y=this.mouse.y;
-    if(this.state==='PLAYING'&&this.isInGameToggleArea(x,y)){this.setControlMode(this.controlMode==='touch'?'keyboard':'touch');return;}
+    // Toggle control mode (top-left button)
+    if(this.state==='PLAYING'&&x>=0&&x<=44&&y>=0&&y<=44&&this.tc){this.tc.setMode(this.tc.mode==='touch'?'keyboard':'touch');return;}
     this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(x,y,item.rect)&&item.action)item.action();});
   }
   pointInRect(x,y,rect){return x>=rect.x&&x<=rect.x+rect.w&&y>=rect.y&&y<=rect.y+rect.h;}
@@ -708,15 +766,14 @@ class EchoMaze {
   }
   handleAiLogic(){const a=this.aiPlayer.decide(this);if(a)this.aiPlayer.applyAction(this,a);}
 
-  update(){
-    if(this.state!=='PLAYING')return;
+  update(){if(this.state!=='PLAYING')return;
     if(this.gameOver||this.won){
       if(this.mode==='WATCH'&&!this.restartTimer)this.restartTimer=performance.now();
       if(this.mode==='WATCH'&&this.restartTimer&&performance.now()-this.restartTimer>1500){this.restartTimer=null;this.resetGame();this.gameOver=false;this.won=false;}
       return;
     }
     if(this.mode==='WATCH')this.handleAiLogic();
-    if(this.controlMode==='touch'&&this.touchCtrl)this.touchCtrl.applyMovement();
+    if(this.tc)this.tc.applyInput();
     const cfg=this.getConfig();
     if(this.dashCooldown>0)this.dashCooldown--;if(this.shootCooldown>0)this.shootCooldown--;
     const accel=0.28,fric=0.86;
@@ -977,12 +1034,8 @@ class EchoMaze {
   }
   drawInventory() {
     const ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
-    let slotW, slotH, gap, startX, y;
-    if(this.controlMode==='touch'&&this.touchCtrl){
-      const ts=this.touchCtrl.itemSlots;startX=ts[0].x;y=ts[0].y;slotW=ts[0].w;slotH=ts[0].h;gap=ts[1].x-ts[0].x-slotW;
-    }else{
-      slotW=70;slotH=56;gap=8;const totalW=4*slotW+3*gap;startX=w/2-totalW/2;y=h-slotH-24;
-    }
+    const slotW = 70, slotH = 56, gap = 8, totalW = 4*slotW + 3*gap;
+    const startX = w/2 - totalW/2, y = h - slotH - 24;
     ITEM_KEYS.forEach((type, i) => {
       const x = startX + i*(slotW+gap);
       const def = ITEM_DEFS[type];
@@ -1033,8 +1086,6 @@ class EchoMaze {
 
   drawMenu() {
     const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,t=performance.now()/1000;
-    const switcher=document.getElementById('control-switcher');if(switcher)switcher.style.display='flex';
-    const ingame=document.getElementById('ingame-ctrl-toggle');if(ingame)ingame.style.display='none';
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     this.updateMenuParticles();
     this.menuParticles.forEach(p=>{const a=p.life/p.ml;ctx.fillStyle=p.color;ctx.globalAlpha=0.75*a;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,p.size*a),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0;});
@@ -1225,7 +1276,20 @@ class EchoMaze {
     ctx.globalAlpha = 1;
   }
 
-  frame(timestamp){this.update();this.draw();requestAnimationFrame(t=>this.frame(t));}
+  frame(timestamp){
+    if (!this._lastFrame) this._lastFrame = timestamp;
+    const elapsed = timestamp - this._lastFrame;
+    this._lastFrame = timestamp;
+    this._acc = (this._acc || 0) + elapsed;
+    const TICK = 16.6667;
+    while (this._acc >= TICK) {
+      this.update();
+      this._acc -= TICK;
+    }
+    this.draw();
+    if(this.tc)this.tc.draw(this.ctx);
+    requestAnimationFrame(t=>this.frame(t));
+  }
 }
 
 window.addEventListener('load',()=>{new EchoMaze();});
