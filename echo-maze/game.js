@@ -1087,9 +1087,11 @@ class EchoMaze {
     this.updateMenuParticles();
     this.menuParticles.forEach(p=>{const a=p.life/p.ml;ctx.fillStyle=p.color;ctx.globalAlpha=0.75*a;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,p.size*a),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0;});
     for(let i=0;i<3;i++){const rad=220+i*140+Math.sin(t+i)*40;ctx.strokeStyle=`rgba(88,196,221,${Math.max(0,0.12-i*0.04)})`;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(w/2,h/2,rad,0,Math.PI*2);ctx.stroke();}
-    const cx=w/2,by=h/4-20;ctx.textAlign='center';
-    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font='bold 56px system-ui,sans-serif';ctx.fillText('Echo Maze',cx,by);ctx.restore();
-    ctx.fillStyle=COLORS.accentDim;ctx.font='22px system-ui,sans-serif';ctx.fillText('Combat Edition',cx,by+58);
+    const cx=w/2,compact=h<500,by=compact?h*0.12:h/4-20;
+    const tSize=compact?Math.round(36*(h/500)):56,sSize=compact?Math.round(16*(h/500)):22;
+    ctx.textAlign='center';
+    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font=`bold ${tSize}px system-ui,sans-serif`;ctx.fillText('Echo Maze',cx,by);ctx.restore();
+    ctx.fillStyle=COLORS.accentDim;ctx.font=`${sSize}px system-ui,sans-serif`;ctx.fillText('Combat Edition',cx,by+Math.round(tSize*1.05));
 
     if (this.menuTransition) {
       this.menuRects = [];
@@ -1117,11 +1119,20 @@ class EchoMaze {
 
   drawMenuContent(state, cx, by, w, h) {
     const ctx = this.ctx;
-    let bottomY = h - 40;
+    const compact = h < 500;
+    const tScale = compact ? Math.max(0.7, h / 500) : 1;
+    const titleFont = Math.round(18 * tScale);
+    const hintFont = Math.round(13 * tScale);
+    let bottomY = h - 20;
+
+    // Shared: start Y for content area
+    const startY = by + Math.round(100 * tScale);
+    const titleY = startY;
 
     if (state === 'MENU_MODE') {
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';ctx.fillText('SELECT GAME MODE',cx,by+120);
-      const bw=Math.min(500,w*0.55), gap=62;
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;ctx.fillText('SELECT GAME MODE',cx,titleY);
+      const btnW=Math.min(480,w*0.55), btnH=Math.round(40*tScale);
+      const gap=Math.round(50*tScale);
       const btns=[
         {label:'1. Survival',action:()=>{this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'2. Level',action:()=>{this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}},
@@ -1132,34 +1143,38 @@ class EchoMaze {
     this.rotateDismissed=false;this.state='PLAYING';this.resetGame();}},
         {label:'L. Load Game',action:()=>this.loadGame()},
       ];
-      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
-      bottomY=by+160+btns.length*gap+50;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('Click or press key — ESC to return',cx,bottomY);
+      const btnStartY=titleY+Math.round(28*tScale);
+      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,btnStartY+i*gap,btnW,btnH,item.label,item.action);});
+      bottomY=btnStartY+btns.length*gap+Math.round(20*tScale);
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText(compact?'Tap or press key':'Click or press key — ESC to return',cx,bottomY);
     }
     else if (state === 'MENU_DIFFICULTY') {
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
-      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,by+120);
-      const bw=Math.min(440,w*0.5), gap=62;
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;
+      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,titleY);
+      const btnW=Math.min(420,w*0.5), btnH=Math.round(40*tScale);
+      const gap=Math.round(50*tScale);
       const diffs=[
         {label:'1. Easy',action:()=>{this.difficulty='EASY';this.transitionTo('MENU_OPTIONS');}},
         {label:'2. Normal',action:()=>{this.difficulty='NORMAL';this.transitionTo('MENU_OPTIONS');}},
         {label:'3. Hard',action:()=>{this.difficulty='HARD';this.transitionTo('MENU_OPTIONS');}},
       ];
-      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
-      bottomY=by+160+diffs.length*gap+50;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('ESC to go back',cx,bottomY);
+      const btnStartY=titleY+Math.round(28*tScale);
+      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,btnStartY+i*gap,btnW,btnH,item.label,item.action);});
+      bottomY=btnStartY+diffs.length*gap+Math.round(20*tScale);
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText('ESC to go back',cx,bottomY);
     }
     else if (state === 'MENU_OPTIONS') {
       const ml=this.mode==='SURVIVAL'?'Survival':'Level';
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
-      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,by+120);
-      const tw=360, ty=by+175, tcx=cx-tw/2;
-      this.drawToggle(ctx,tcx,ty,'Bright Mode (full visibility)',this.brightMode,()=>this.brightMode=!this.brightMode);
-      this.drawToggle(ctx,tcx,ty+56,'God Mode (infinite energy)',this.godMode,()=>this.godMode=!this.godMode);
-      const startW=240;
-      this.drawMenuButton(ctx,cx,ty+140,startW,44,'Start Game',()=>{this.state='PLAYING';this.resetGame();});
-      bottomY=ty+200;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${titleFont}px system-ui,sans-serif`;
+      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,titleY);
+      const tw=Math.min(340,w*0.5), ty=titleY+Math.round(28*tScale), tcx=cx-tw/2;
+      const toggleH=Math.round(40*tScale);
+      this.drawToggle(ctx,tcx,ty,tw,toggleH,'Bright Mode',this.brightMode,()=>this.brightMode=!this.brightMode);
+      this.drawToggle(ctx,tcx,ty+toggleH+Math.round(8*tScale),tw,toggleH,'God Mode',this.godMode,()=>this.godMode=!this.godMode);
+      const startW=Math.round(200*tScale);
+      this.drawMenuButton(ctx,cx,ty+toggleH*2+Math.round(30*tScale),startW,Math.round(38*tScale),'Start Game',()=>{this.state='PLAYING';this.resetGame();});
+      bottomY=ty+toggleH*2+Math.round(80*tScale);
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${hintFont}px system-ui,sans-serif`;ctx.fillText(compact?'Tap to start':'SPACE/ENTER — 1/2 toggle — ESC back',cx,bottomY);
     }
   }
 
@@ -1174,13 +1189,13 @@ class EchoMaze {
     ctx.quadraticCurveTo(lx+w,y+lift+h,lx+w-radius,y+lift+h);ctx.lineTo(lx+radius,y+lift+h);
     ctx.quadraticCurveTo(lx,y+lift+h,lx,y+lift+h-radius);ctx.lineTo(lx,y+lift+radius);
     ctx.quadraticCurveTo(lx,y+lift,lx+radius,y+lift);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font='bold 14px system-ui,sans-serif';
+    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font='bold 13px system-ui,sans-serif';
     ctx.fillText(label,x,y+lift+h/2+5);
     this.menuRects.push({rect:{x:lx,y,w,h},action});
   }
 
-  drawToggle(ctx, x, y, label, on, action){
-    const w=360,h=42,radius=8, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
+  drawToggle(ctx, x, y, w, h, label, on, action){
+    const radius=8, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
     const lift=hover?-2:0;
     ctx.fillStyle=on?'rgba(88,196,221,0.08)':hover?'rgba(255,255,255,0.03)':COLORS.panel;
     ctx.strokeStyle=on?COLORS.accent:hover?'#3a3f50':'#2a2f40';
