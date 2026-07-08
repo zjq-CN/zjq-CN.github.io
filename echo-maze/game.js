@@ -239,21 +239,33 @@ class TouchController {
   }
   layout() {
     const w = this.game.w || this.game.canvas.width, h = this.game.h || this.game.canvas.height;
-    this.joystick.baseX = 100;
-    this.joystick.baseY = h - 100;
+    const isLandscape = w > h;
+    const scale = isLandscape ? Math.min(h / 480, 1) : 1;
+    this.joystickRadius = Math.round(50 * scale);
+    this.knobRadius = Math.round(18 * scale);
+    this.joystickHotzone = Math.round(25 * scale);
+    const jm = this.joystickRadius + 20;
+    this.joystick.baseX = jm + 10;
+    this.joystick.baseY = h - jm - 10;
     this.joystick.knobX = this.joystick.baseX;
     this.joystick.knobY = this.joystick.baseY;
-    const bx = w - 100, by = h - 100;
-    this.buttons[0].x = bx + 55; this.buttons[0].y = by;
-    this.buttons[1].x = bx;      this.buttons[1].y = by - 55;
-    this.buttons[2].x = bx;      this.buttons[2].y = by + 55;
-    const slotW = 60, gap = 8, totalW = 4 * slotW + 3 * gap;
+    const br = Math.round(24 * scale);
+    const bGap = Math.round(48 * scale);
+    this.buttons.forEach(b => b.radius = br);
+    const bx = w - br - 20, by = h - br - 20;
+    this.buttons[0].x = bx + bGap * 0.6; this.buttons[0].y = by;
+    this.buttons[1].x = bx;               this.buttons[1].y = by - bGap;
+    this.buttons[2].x = bx - bGap * 0.4;  this.buttons[2].y = by + bGap * 0.2;
+    const slotW = isLandscape ? Math.max(44, Math.round(56 * scale)) : 60;
+    const slotH = Math.max(40, Math.round(50 * scale));
+    const gap = Math.round(6 * scale);
+    const totalW = 4 * slotW + 3 * gap;
     const startX = w / 2 - totalW / 2;
     for (let i = 0; i < 4; i++) {
       this.itemSlots[i].x = startX + i * (slotW + gap);
-      this.itemSlots[i].y = h - 56 - 24;
+      this.itemSlots[i].y = h - slotH - Math.round(12 * scale);
       this.itemSlots[i].w = slotW;
-      this.itemSlots[i].h = 56;
+      this.itemSlots[i].h = slotH;
     }
   }
   handleTouchStart(e) {
@@ -501,9 +513,22 @@ class EchoMaze {
   get h(){return window.innerHeight;}
   initTouchControls(){
     this.touchCtrl=new TouchController(this);
-    this.canvas.addEventListener('touchstart',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchStart(e);},{passive:false});
-    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchMove(e);},{passive:false});
-    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
+    this.canvas.addEventListener('touchstart',e=>{
+      e.preventDefault();
+      if(this.controlMode!=='touch')return;
+      const t=e.changedTouches[0],tx=t.clientX,ty=t.clientY;
+      if(this.state==='PLAYING'&&!this.paused){
+        this.touchCtrl.handleTouchStart(e);
+      }else{
+        this.mouse.x=tx;this.mouse.y=ty;
+        this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(tx,ty,item.rect)&&item.action)item.action();});
+        if(this.state==='PLAYING'&&this.paused&&this.pointInRect(tx,ty,{x:0,y:0,w:44,h:44})){
+          this.setControlMode(this.controlMode==='touch'?'keyboard':'touch');
+        }
+      }
+    },{passive:false});
+    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchMove(e);},{passive:false});
+    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchEnd(e);},{passive:false});
     this.canvas.addEventListener('touchcancel',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
     window.addEventListener('orientationchange',()=>setTimeout(()=>this.checkLandscape(),200));
     window.addEventListener('resize',()=>this.checkLandscape());
@@ -998,8 +1023,15 @@ class EchoMaze {
   }
   drawInventory() {
     const ctx = this.ctx, w = this.w, h = this.h;
-    const slotW = this.controlMode==='touch'?60:70, slotH = 56, gap = 8, totalW = 4*slotW + 3*gap;
-    const startX = w/2 - totalW/2, y = h - slotH - 24;
+    let slotW, slotH, gap, startX, y;
+    if(this.controlMode==='touch'&&this.touchCtrl){
+      const ts=this.touchCtrl.itemSlots;
+      startX=ts[0].x; y=ts[0].y; slotW=ts[0].w; slotH=ts[0].h;
+      gap=(ts[1].x-ts[0].x-slotW);
+    }else{
+      slotW=70; slotH=56; gap=8; const totalW=4*slotW+3*gap;
+      startX=w/2-totalW/2; y=h-slotH-24;
+    }
     ITEM_KEYS.forEach((type, i) => {
       const x = startX + i*(slotW+gap);
       const def = ITEM_DEFS[type];
