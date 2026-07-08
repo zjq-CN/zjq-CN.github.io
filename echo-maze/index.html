@@ -2,13 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#080c14">
   <title>Echo Maze: Browser Edition</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="game-container">
     <canvas id="game-canvas"></canvas>
+  </div>
+
+  <!-- Touch Controls Overlay (hidden on desktop) -->
+  <div id="touch-controls">
+    <!-- Virtual Joystick -->
+    <div id="joystick-zone">
+      <div id="joystick-base">
+        <div id="joystick-thumb"></div>
+      </div>
+    </div>
+
+    <!-- Action Buttons (right side) -->
+    <div id="action-buttons">
+      <button class="touch-btn touch-btn-ping" data-action="ping" title="Sonar">PING</button>
+      <button class="touch-btn touch-btn-dash" data-action="dash" title="Dash">DASH</button>
+      <button class="touch-btn touch-btn-shoot" data-action="shoot" title="Shoot">🔫</button>
+    </div>
+
+    <!-- Item Buttons (bottom right) -->
+    <div id="item-buttons">
+      <button class="touch-item-btn" data-item="shield" title="Shield">🛡️</button>
+      <button class="touch-item-btn" data-item="scatter" title="Scatter">💥</button>
+      <button class="touch-item-btn" data-item="boost" title="Boost">⚡</button>
+      <button class="touch-item-btn" data-item="teleport" title="Teleport">🌀</button>
+    </div>
+
+    <!-- Pause Button (top-left, touch-friendly) -->
+    <button id="touch-pause-btn" title="Pause">⏸</button>
   </div>
 
   <!-- Help Button -->
@@ -77,8 +108,7 @@
     </div>
   </div>
 
-  <div id="rotate-overlay"><div id="rotate-icon">🔄</div><div id="rotate-text">请旋转手机至横屏模式</div><button id="rotate-dismiss">我知道了，继续竖屏</button></div>
-  <button id="ctrl-toggle-btn" title="切换操控">📱</button>
+  <script src="touchInput.js"></script>
   <script src="game.js"></script>
 </body>
 </html>

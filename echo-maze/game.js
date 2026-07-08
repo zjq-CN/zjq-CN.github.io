@@ -1,7 +1,13 @@
-const CELL_SIZE = 80;
+// Base cell size — will be scaled based on screen size
+const BASE_CELL_SIZE = 80;
 const CHUNK_SIZE = 10;
 const FPS = 60;
-const WALL_THICKNESS = 8;
+const BASE_WALL_THICKNESS = 8;
+
+// Dynamic sizing — computed once at init
+let CELL_SIZE = BASE_CELL_SIZE;
+let WALL_THICKNESS = BASE_WALL_THICKNESS;
+let UI_SCALE = 1.0;
 
 const COLORS = {
   bg:       '#080c14',
@@ -193,8 +199,22 @@ class Enemy {
 }
 
 class AiPlayer {
-  constructor() { this.decisionCooldown=0; }
+  constructor() {
+    this.decisionCooldown=0;
+    this.aiController = null;
+    this.useNewAI = false;
+  }
+  
+  setNewAIController(controller) {
+    this.aiController = controller;
+    this.useNewAI = true;
+  }
+  
   decide(game) {
+    if (this.useNewAI && this.aiController) {
+      this.decisionCooldown = 0;
+      return this.aiController.decide(game);
+    }
     if(this.decisionCooldown>0){this.decisionCooldown--;return null;}
     this.decisionCooldown=5;
     if(game.enemies.length>0){
@@ -207,6 +227,10 @@ class AiPlayer {
     return ['up','down','left','right'][Math.floor(Math.random()*4)];
   }
   applyAction(game, action) {
+    if (this.useNewAI && this.aiController) {
+      this.aiController.applyAction(game, action);
+      return;
+    }
     const s=0.28;
     if(action==='up')game.playerVel[1]-=s;if(action==='down')game.playerVel[1]+=s;
     if(action==='left')game.playerVel[0]-=s;if(action==='right')game.playerVel[0]+=s;
@@ -216,218 +240,30 @@ class AiPlayer {
   }
 }
 
-
-// ─── Touch Controls (mobile overlay - independent of game logic) ───
-class TouchControls {
-  constructor(g) {
-    this.g = g;
-    this.mode = 'keyboard'; // 'touch' | 'keyboard'
-    this.j = { active: false, tid: null, bx: 0, by: 0, kx: 0, ky: 0, dx: 0, dy: 0, r: 50, kr: 18 };
-    this.btns = [
-      { id: 'shoot', c: '#ff3b4a', l: 'N', tid: null, down: false, x: 0, y: 0, r: 24 },
-      { id: 'ping',  c: '#00ff96', l: 'S', tid: null, down: false, x: 0, y: 0, r: 24 },
-      { id: 'dash',  c: '#00bfff', l: 'D', tid: null, down: false, x: 0, y: 0, r: 24 },
-    ];
-    this._detect();
-    this._layout();
-    this._bind();
-  }
-
-  _detect() {
-    if (('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 1024)
-      this.mode = 'touch';
-  }
-
-  setMode(m) { this.mode = m; this._layout(); this._checkLandscape(); }
-
-  _bind() {
-    const c = this.g.canvas;
-    c.addEventListener('touchstart', e => { e.preventDefault(); this._onTS(e); }, { passive: false });
-    c.addEventListener('touchmove',  e => { e.preventDefault(); this._onTM(e); }, { passive: false });
-    c.addEventListener('touchend',   e => { e.preventDefault(); this._onTE(e); }, { passive: false });
-    c.addEventListener('touchcancel', e => { e.preventDefault(); this._onTE(e); }, { passive: false });
-    window.addEventListener('orientationchange', () => setTimeout(() => this._checkLandscape(), 200));
-    window.addEventListener('resize', () => this._layout());
-    const d = document.getElementById('rotate-dismiss');
-    if (d) d.addEventListener('click', () => { this._dismissed = true; this._checkLandscape(); });
-    const tgl = document.getElementById('ctrl-toggle-btn');
-    if (tgl) tgl.addEventListener('click', () => {
-      this.setMode(this.mode === 'touch' ? 'keyboard' : 'touch');
-      tgl.textContent = this.mode === 'touch' ? '📱' : '⌨️';
-    });
-  }
-
-  _checkLandscape() {
-    const o = document.getElementById('rotate-overlay');
-    if (!o) return;
-    if (this.mode === 'touch' && window.innerHeight > window.innerWidth && !this._dismissed)
-      o.classList.add('show');
-    else
-      o.classList.remove('show');
-  }
-
-  _layout() {
-    const w = this.g.canvas.width, h = this.g.canvas.height;
-    const sc = Math.min(h / 500, 1);
-    this.j.r = Math.round(50 * sc); this.j.kr = Math.round(18 * sc);
-    const jm = this.j.r + 20;
-    this.j.bx = jm + 10; this.j.by = h - jm - 10; this.j.kx = this.j.bx; this.j.ky = this.j.by;
-    this.j.dx = 0; this.j.dy = 0;
-    const br = Math.round(24 * sc), bg = Math.round(46 * sc);
-    this.btns.forEach(b => b.r = br);
-    const bx = w - br - 20, by = h - br - 20;
-    this.btns[0].x = bx + bg * 0.6; this.btns[0].y = by;
-    this.btns[1].x = bx;             this.btns[1].y = by - bg;
-    this.btns[2].x = bx - bg * 0.4;  this.btns[2].y = by + bg * 0.2;
-    this._checkLandscape();
-  }
-
-  _onTS(e) {
-    if (this.mode !== 'touch') return;
-    const g = this.g;
-    for (const t of e.changedTouches) {
-      const tx = t.clientX, ty = t.clientY;
-      if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) continue;
-      // Joystick
-      if (!this.j.active && Math.hypot(tx - this.j.bx, ty - this.j.by) < this.j.r + 30) {
-        this.j.active = true; this.j.tid = t.identifier;
-        this._moveStick(tx, ty); continue;
-      }
-      // Buttons
-      for (const b of this.btns) {
-        if (!b.down && Math.hypot(tx - b.x, ty - b.y) < b.r + 12) {
-          b.down = true; b.tid = t.identifier; this._fireBtn(b.id);
-        }
-      }
-      // Item slots (bottom center)
-      this._tryItemSlot(tx, ty);
-    }
-  }
-
-  _tryItemSlot(tx, ty) {
-    const g = this.g, w = g.canvas.width, h = g.canvas.height;
-    const slotW = 56, slotH = 50, gap = 8, totalW = 4 * slotW + 3 * gap;
-    const sx = w / 2 - totalW / 2, sy = h - slotH - 12;
-    const keys = ['shield', 'scatter', 'boost', 'teleport'];
-    for (let i = 0; i < 4; i++) {
-      const x = sx + i * (slotW + gap);
-      if (tx >= x && tx <= x + slotW && ty >= sy && ty <= sy + slotH)
-        g.activateItem(keys[i]);
-    }
-  }
-
-  _onTM(e) {
-    for (const t of e.changedTouches)
-      if (t.identifier === this.j.tid) this._moveStick(t.clientX, t.clientY);
-  }
-
-  _onTE(e) {
-    for (const t of e.changedTouches) {
-      if (t.identifier === this.j.tid) {
-        this.j.active = false; this.j.tid = null;
-        this.j.kx = this.j.bx; this.j.ky = this.j.by; this.j.dx = 0; this.j.dy = 0;
-      }
-      for (const b of this.btns) {
-        if (t.identifier === b.tid) { b.down = false; b.tid = null; }
-      }
-    }
-  }
-
-  _moveStick(tx, ty) {
-    let dx = tx - this.j.bx, dy = ty - this.j.by;
-    const d = Math.hypot(dx, dy);
-    if (d > this.j.r) { dx = dx / d * this.j.r; dy = dy / d * this.j.r; }
-    this.j.kx = this.j.bx + dx; this.j.ky = this.j.by + dy;
-    this.j.dx = dx / this.j.r; this.j.dy = dy / this.j.r;
-  }
-
-  _fireBtn(id) {
-    const g = this.g;
-    if (id === 'shoot' && g.shootCooldown <= 0) g.shoot();
-    if (id === 'ping') {
-      const c = g.isGod() ? 0 : g.getConfig().pingCost;
-      if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; }
-    }
-    if (id === 'dash') {
-      if (g.buffs.boost.active) { g.boosting = true; }
-      else {
-        const c = g.isGod() ? 0 : g.getConfig().dashCost;
-        if (g.dashCooldown <= 0 && g.energy >= c) g.dash(c);
-      }
-    }
-  }
-
-  applyInput() {
-    if (this.mode !== 'touch') return;
-    const g = this.g;
-    if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
-    if (!this.j.active) {
-      g.keys['w'] = g.keys['w'] || false; g.keys['a'] = g.keys['a'] || false;
-      g.keys['s'] = g.keys['s'] || false; g.keys['d'] = g.keys['d'] || false;
-      return;
-    }
-    const dz = 0.25, jx = this.j.dx, jy = this.j.dy;
-    if (jy < -dz) g.keys['w'] = true;
-    if (jy > dz)  g.keys['s'] = true;
-    if (jx < -dz) g.keys['a'] = true;
-    if (jx > dz)  g.keys['d'] = true;
-  }
-
-  draw(ctx) {
-    if (this.mode !== 'touch') return;
-    const g = this.g;
-    if (g.state !== 'PLAYING' || g.paused) return;
-    // Toggle button
-    ctx.fillStyle = 'rgba(13,18,32,0.7)';
-    ctx.beginPath(); ctx.arc(20, 20, 16, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#3a8fa8'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(20, 20, 16, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = '#58c4dd'; ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('📱', 20, 24); ctx.textAlign = 'left';
-    // Joystick
-    ctx.globalAlpha = 0.3; ctx.strokeStyle = '#58c4dd'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(this.j.bx, this.j.by, this.j.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = this.j.active ? 0.6 : 0.35; ctx.fillStyle = '#58c4dd';
-    ctx.beginPath(); ctx.arc(this.j.kx, this.j.ky, this.j.kr, 0, Math.PI * 2); ctx.fill();
-    // Buttons
-    for (const b of this.btns) {
-      ctx.globalAlpha = b.down ? 0.7 : 0.4; ctx.fillStyle = b.c;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = b.down ? 1 : 0.8; ctx.fillStyle = '#fff';
-      ctx.font = 'bold 12px system-ui,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(b.l, b.x, b.y + 4);
-    }
-    ctx.globalAlpha = 1; ctx.textAlign = 'left';
-    // Item slots
-    const w = g.canvas.width, h = g.canvas.height;
-    const slotW = 56, slotH = 50, gap = 8, totalW = 4 * slotW + 3 * gap;
-    const sx = w / 2 - totalW / 2, sy = h - slotH - 12;
-    const keys = ['shield','scatter','boost','teleport'];
-    keys.forEach((type, i) => {
-      if (!g.inventory || g.inventory[type] < 1) return;
-      const x = sx + i * (slotW + gap), isActive = g.inventory[type] === 2;
-      ctx.fillStyle = isActive ? 'rgba(255,255,255,0.13)' : '#111522';
-      ctx.strokeStyle = isActive ? '#58c4dd' : '#1e2640';
-      ctx.lineWidth = isActive ? 2 : 1;
-      const r = 6;
-      ctx.beginPath(); ctx.moveTo(x+r,sy); ctx.lineTo(x+slotW-r,sy);
-      ctx.quadraticCurveTo(x+slotW,sy,x+slotW,sy+r); ctx.lineTo(x+slotW,sy+slotH-r);
-      ctx.quadraticCurveTo(x+slotW,sy+slotH,x+slotW-r,sy+slotH); ctx.lineTo(x+r,sy+slotH);
-      ctx.quadraticCurveTo(x,sy+slotH,x,sy+slotH-r); ctx.lineTo(x,sy+r);
-      ctx.quadraticCurveTo(x,sy,x+r,sy); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#58c4dd'; ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText(String(i+1), x + 14, sy + slotH - 14);
-    });
-    ctx.textAlign = 'left';
-  }
-}
-
 class EchoMaze {
   constructor() {
     this.canvas=document.getElementById('game-canvas');
     this.ctx=this.canvas.getContext('2d');
+    this.devicePixelRatio = window.devicePixelRatio || 1;
+    this.isTouchDevice = false;
+    this.touchInput = null;
+    // CSS-pixel dimensions (used for all drawing coordinates)
+    this.cssWidth = window.innerWidth;
+    this.cssHeight = window.innerHeight;
+
+    // Detect touch
+    if (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)) {
+      this.isTouchDevice = true;
+    }
+
     this.resize();
     window.addEventListener('resize',()=>this.resize());
+
+    // Initialize touch input system
+    if (typeof TouchInput !== 'undefined') {
+      this.touchInput = new TouchInput(this);
+    }
+
     this.keys={};this.mouse={x:0,y:0,down:false};this.menuRects=[];
     this.menuParticles=[];this.menuButtonGlow=0;this.menuAnimating=true;
     this.menuTransition=null;
@@ -436,11 +272,33 @@ class EchoMaze {
     this.difficulty='NORMAL';
     this.brightMode=false;
     this.godMode=false;
-    this.tc=null;
     this.aiPlayer=new AiPlayer();
+    // Initialize new AI controller (uses trained policy via llmInterface)
+    if (typeof AIController !== 'undefined') {
+      try {
+        const aiController = new AIController();
+        this.aiPlayer.setNewAIController(aiController);
+        this.aiController = aiController;
+        console.log('✓ AI Controller initialized');
+      } catch(e) {
+        console.log('⚠ AI Controller init failed:', e.message);
+      }
+    }
     this.message='';this.messageTimer=0;
     this.seed=Math.floor(Math.random()*1_000_000);
     // --- NEW: inventory & buffs ---
+    // Training state
+    this.trainingState='idle'; // idle | training | evaluating | done | error
+    this.trainingProgress=0;
+    this.trainingMessage='';
+    this.trainingLogs=[];
+    this.trainingEstimatedTime=0;
+    this.trainingElapsedTime=0;
+    this.trainingStartTime=0;
+    this.trainingConfig={episodes:35, maxSteps:650, epochs:20};
+    this.trainingServerReady=false;
+    this.initTrainingServer();
+    
     this.inventory = { shield:0, scatter:0, boost:0, teleport:0 };
     this.buffs = {
       shield:  { active:false, timer:0 },
@@ -454,7 +312,6 @@ class EchoMaze {
     // --- end NEW ---
     this.resetGame();
     this.bindEvents();
-    this.tc=new TouchControls(this);
     requestAnimationFrame(t=>this.frame(t));
   }
 
@@ -550,12 +407,12 @@ class EchoMaze {
 
   // --- MENU PARTICLES ---
   spawnMenuParticle() {
-    const w=this.canvas.width,h=this.canvas.height,x=Math.random()*w,y=Math.random()*h;
+    const w=this.cssWidth,h=this.cssHeight,x=Math.random()*w,y=Math.random()*h;
     this.menuParticles.push({x,y,size:2+Math.random()*5,sx:(Math.random()-0.5)*1.6,sy:(Math.random()-0.5)*1.6,life:80+Math.floor(Math.random()*120),ml:100,color:['#00e5ff','#ff4081','#7c4dff','#00e676','#ffab00'][Math.floor(Math.random()*5)]});
   }
   updateMenuParticles() {
     if(!this.menuAnimating)return;
-    const w=this.canvas.width,h=this.canvas.height;
+    const w=this.cssWidth,h=this.cssHeight;
     for(let i=this.menuParticles.length-1;i>=0;i--){
       const p=this.menuParticles[i];p.x+=p.sx;p.y+=p.sy;p.life--;
       if(p.x<0||p.x>w)p.sx*=-1;if(p.y<0||p.y>h)p.sy*=-1;
@@ -563,7 +420,38 @@ class EchoMaze {
     }
     while(this.menuParticles.length<45)this.spawnMenuParticle();
   }
-  resize(){this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;if(this.tc)this.tc._layout();}
+  resize(){
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const dpr = this.devicePixelRatio || 1;
+
+    // Store CSS-pixel dimensions for all drawing
+    this.cssWidth = w;
+    this.cssHeight = h;
+
+    // Set canvas backing store to match physical pixels
+    this.canvas.width = w * dpr;
+    this.canvas.height = h * dpr;
+    this.canvas.style.width = w + 'px';
+    this.canvas.style.height = h + 'px';
+
+    // Scale context so draw coordinates are in CSS pixels
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Compute dynamic CELL_SIZE based on smallest screen dimension
+    const minDim = Math.min(w, h);
+    if (this.isTouchDevice) {
+      // On phones, make cells bigger for easier touch navigation
+      CELL_SIZE = Math.max(BASE_CELL_SIZE * 0.7, Math.min(BASE_CELL_SIZE * 1.1, minDim / 12));
+      WALL_THICKNESS = Math.max(5, CELL_SIZE * 0.1);
+      UI_SCALE = Math.min(1.0, CELL_SIZE / BASE_CELL_SIZE);
+    } else {
+      // Desktop: keep cell size reasonable, never exceed base
+      CELL_SIZE = Math.min(BASE_CELL_SIZE, Math.max(BASE_CELL_SIZE * 0.6, minDim / 16));
+      WALL_THICKNESS = Math.max(5, CELL_SIZE * 0.1);
+      UI_SCALE = Math.min(1.0, CELL_SIZE / BASE_CELL_SIZE);
+    }
+  }
   bindEvents(){
     window.addEventListener('keydown',e=>this.onKeyDown(e));
     window.addEventListener('keyup',e=>this.onKeyUp(e));
@@ -577,254 +465,40 @@ class EchoMaze {
     if (helpClose) helpClose.addEventListener('click', () => overlay.classList.remove('show'));
     if (overlay) overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.classList.remove('show'); });
   }
-  onMouseMove(e){const r=this.canvas.getBoundingClientRect();this.mouse.x=e.clientX-r.left;this.mouse.y=e.clientY-r.top;}
-  onMouseDown(e){
-    const x=this.mouse.x,y=this.mouse.y;
-    // Toggle control mode (top-left button)
-    if(this.state==='PLAYING'&&x>=0&&x<=44&&y>=0&&y<=44&&this.tc){this.tc.setMode(this.tc.mode==='touch'?'keyboard':'touch');return;}
-    this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(x,y,item.rect)&&item.action)item.action();});
-  }
-  pointInRect(x,y,rect){return x>=rect.x&&x<=rect.x+rect.w&&y>=rect.y&&y<=rect.y+rect.h;}
 
-  onKeyDown(event) {
-    // Close help overlay first
-    const overlay = document.getElementById('help-overlay');
-    if (event.key === 'Escape' && overlay && overlay.classList.contains('show')) {
-      overlay.classList.remove('show'); return;
+  // ──── Touch Input Handlers (called by TouchInput) ────
+  simulateTap(x, y) {
+    // Used for menu interactions on touch devices
+    this.mouse.x = x;
+    this.mouse.y = y;
+    // Check menu rects
+    for (const item of this.menuRects) {
+      if (item.rect && this.pointInRect(x, y, item.rect) && item.action) {
+        item.action();
+        // Haptic feedback if available
+        if (navigator.vibrate) navigator.vibrate(15);
+        return;
+      }
     }
-    // Block menu input during transition
+    // If no menu match and in playing state, handle pause overlay taps
+    if (this.state === 'MENU_PAUSE') {
+      // The drawPauseOverlay creates menuRects, so re-check matches
+      // (handled by the loop above)
+    }
+  }
+
+  onTouchPause() {
     if (this.menuTransition) return;
-    if(event.key==='Escape'){
-      if(this.state==='MENU_OPTIONS')this.transitionTo('MENU_DIFFICULTY');
-      else if(this.state==='MENU_DIFFICULTY')this.transitionTo('MENU_MODE');
-      else if(this.state==='PLAYING')this.state='MENU_MODE';
+    if (this.state === 'PLAYING') {
+      this.state = 'MENU_PAUSE';
+    } else if (this.state === 'MENU_PAUSE') {
+      this.state = 'PLAYING';
     }
+   
 
-    // Main menu: pick mode
-    if(this.state==='MENU_MODE'){
-      if(event.key==='1'){this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}
-      if(event.key==='2'){this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}
-      if(event.key==='3'){this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}
-      if(event.key.toLowerCase()==='l')this.loadGame();
-    }
+... [OUTPUT TRUNCATED - 16742 chars omitted out of 66742 total] ...
 
-    // Difficulty menu
-    if(this.state==='MENU_DIFFICULTY'){
-      if(event.key==='1'){this.difficulty='EASY';this.transitionTo('MENU_OPTIONS');}
-      if(event.key==='2'){this.difficulty='NORMAL';this.transitionTo('MENU_OPTIONS');}
-      if(event.key==='3'){this.difficulty='HARD';this.transitionTo('MENU_OPTIONS');}
-    }
 
-    // Toggles menu
-    if(this.state==='MENU_OPTIONS'){
-      if(event.key==='1')this.brightMode=!this.brightMode;
-      if(event.key==='2')this.godMode=!this.godMode;
-      if(event.key===' '||event.key==='Enter'){this.state='PLAYING';this.resetGame();}
-    }
-
-    // Playing
-    if(this.state==='PLAYING'){
-      // Item activation keys 1-4
-      if(event.key==='1'){ this.activateItem('shield'); return; }
-      if(event.key==='2'){ this.activateItem('scatter'); return; }
-      if(event.key==='3'){ this.activateItem('boost'); return; }
-      if(event.key==='4'){ this.activateItem('teleport'); return; }
-
-      if(event.key===' '){event.preventDefault();const c=this.isGod()?0:this.getConfig().pingCost;if(this.energy>=c){this.emitPing();if(!this.isGod())this.energy-=c;}}
-      // Shift: dash normally, or boost speed if boost active
-      if(event.key==='Shift'){
-        if (this.buffs.boost.active) {
-          this.boosting = true;
-        } else {
-          const c=this.isGod()?0:this.getConfig().dashCost;
-          if(this.dashCooldown<=0 && this.energy>=c) this.dash(c);
-        }
-      }
-      if(event.key.toLowerCase()==='s')this.saveGame();
-      if(event.key.toLowerCase()==='l')this.loadGame();
-      if(event.key.toLowerCase()==='n'){if(this.shootCooldown<=0)this.shoot();}
-      if(event.key.toLowerCase()==='r'&&(this.gameOver||this.won))this.state='MENU_MODE';
-    }
-    this.keys[event.key.toLowerCase()]=true;
-    // Also track shift in keys for onKeyUp
-    if (event.key === 'Shift') this.keys['shift'] = true;
-  }
-  onKeyUp(event){
-    this.keys[event.key.toLowerCase()]=false;
-    if (event.key === 'Shift') { this.keys['shift'] = false; this.boosting = false; }
-  }
-
-  resetGame(newSeed=true){
-    if(newSeed)this.seed=Math.floor(Math.random()*1_000_000);
-    this.chunks={};this.playerPos=[CELL_SIZE*1.5,CELL_SIZE*1.5];this.playerVel=[0,0];
-    this.energy=100;this.score=0;this.dashCooldown=0;this.shootCooldown=0;
-    this.visibility={};this.visibilityTimer={};this.pings=[];this.enemies=[];this.bullets=[];
-    this.gameOver=false;this.won=false;this.lastMoveDir=[1,0];
-    // Reset inventory & buffs
-    this.inventory = { shield:0, scatter:0, boost:0, teleport:0 };
-    this.buffs = { shield:{active:false,timer:0}, scatter:{active:false,shotsFired:0}, boost:{active:false,timer:0}, teleport:{active:false} };
-    this.boosting = false;
-    this.stuckFrames = 0;
-    this.moveDelta = [0, 0];
-    this.groundItems = [];
-    this.teleportParticles = [];
-    this.pickupMessages = [];
-    if(this.mode==='LEVEL')this.goalPos=[this.randInt(15,25)*CELL_SIZE,this.randInt(15,25)*CELL_SIZE];
-  }
-  randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
-
-  getChunk(gx,gy){
-    const cx=floorDiv(gx,CHUNK_SIZE),cy=floorDiv(gy,CHUNK_SIZE),key=`${cx},${cy}`;
-    if(!this.chunks[key]){
-      const seed=this.seed+cx*1000+cy;
-      this.chunks[key]=new Chunk(cx,cy,this.difficulty,seed);
-      const sp=new SeededRandom(seed), cfg=this.getConfig();
-      let cnt=sp.randInt(cfg.enemySpawn[0],cfg.enemySpawn[1]);
-      const safeR=3,psgx=floorDiv(this.playerPos[0],CELL_SIZE),psgy=floorDiv(this.playerPos[1],CELL_SIZE);
-      for(let cr=0,at=0;cr<cnt&&at<cnt*6;at++){
-        const lx=sp.randInt(0,CHUNK_SIZE-1),ly=sp.randInt(0,CHUNK_SIZE-1);
-        const wx=cx*CHUNK_SIZE+lx,wy=cy*CHUNK_SIZE+ly;
-        if(Math.abs(wx-psgx)<=safeR&&Math.abs(wy-psgy)<=safeR)continue;
-        this.enemies.push(new Enemy(wx*CELL_SIZE+CELL_SIZE/2,wy*CELL_SIZE+CELL_SIZE/2,cfg));cr++;
-      }
-    }
-    return this.chunks[key];
-  }
-
-  checkCollision(pos, isDashing=false){
-    const gx=floorDiv(pos[0],CELL_SIZE),gy=floorDiv(pos[1],CELL_SIZE);
-    const lx=((gx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE,ly=((gy%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-    const chunk=this.getChunk(gx,gy),cell=chunk.cells[`${lx},${ly}`];
-    if(!cell)return pos;
-    const cx=gx*CELL_SIZE,cy=gy*CELL_SIZE,p=15,np=[pos[0],pos[1]];
-    if(isDashing){if(cell.walls[0]&&pos[1]<cy)cell.walls[0]=false;if(cell.walls[2]&&pos[1]>cy+CELL_SIZE)cell.walls[2]=false;if(cell.walls[3]&&pos[0]<cx)cell.walls[3]=false;if(cell.walls[1]&&pos[0]>cx+CELL_SIZE)cell.walls[1]=false;return np;}
-    if(cell.walls[0]&&pos[1]<cy+p)np[1]=cy+p;
-    if(cell.walls[2]&&pos[1]>cy+CELL_SIZE-p)np[1]=cy+CELL_SIZE-p;
-    if(cell.walls[3]&&pos[0]<cx+p)np[0]=cx+p;
-    if(cell.walls[1]&&pos[0]>cx+CELL_SIZE-p)np[0]=cx+CELL_SIZE-p;
-    return np;
-  }
-
-  saveGame(){
-    const d={playerPos:this.playerPos,energy:this.energy,score:this.score,seed:this.seed,mode:this.mode,difficulty:this.difficulty,brightMode:this.brightMode,godMode:this.godMode,visibility:this.visibility,visibilityTimer:this.visibilityTimer,goalPos:this.goalPos||null,
-      inventory:this.inventory, buffs:this.buffs, groundItems:this.groundItems};
-    localStorage.setItem('echoMazeSave',JSON.stringify(d));this.showMessage('Game saved.');
-  }
-  loadGame(){
-    const d=localStorage.getItem('echoMazeSave');
-    if(!d){this.showMessage('No save found.');return;}
-    try{
-      const p=JSON.parse(d);this.mode=p.mode;this.difficulty=p.difficulty;this.brightMode=p.brightMode||false;this.godMode=p.godMode||false;
-      this.resetGame(false);this.playerPos=p.playerPos;this.energy=p.energy;this.score=p.score;this.seed=p.seed;
-      this.visibility=p.visibility||{};this.visibilityTimer=p.visibilityTimer||{};
-      if(p.goalPos)this.goalPos=p.goalPos;
-      if(p.inventory)this.inventory=p.inventory;
-      if(p.buffs)Object.assign(this.buffs, p.buffs);
-      if(p.groundItems)this.groundItems=p.groundItems;
-      this.state='PLAYING';this.showMessage('Game loaded.');
-    }catch(e){this.showMessage('Unable to load save.');}
-  }
-  showMessage(text){this.message=text;this.messageTimer=120;}
-
-  emitPing(free=false){
-    const cfg=this.getConfig();
-    const r=this.isBright()||this.isGod()?1200:cfg.pingRadius;
-    const s=this.isBright()||this.isGod()?20:cfg.pingSpeed;
-    this.pings.push({pos:[...this.playerPos],radius:0,maxRadius:r,speed:s});
-    if (free) return;
-  }
-  shoot(){
-    let speedMult = 8;
-    const cfg=this.getConfig();
-    if (cfg.enemySpeed>1.6) speedMult=6;
-
-    let scatterType = 0;
-    if (this.buffs.scatter.active) {
-      if (this.buffs.scatter.shotsFired < 2) {
-        scatterType = 1; // split after timer
-      } else if (this.buffs.scatter.shotsFired === 2) {
-        scatterType = 2; // split on wall
-      }
-      this.buffs.scatter.shotsFired++;
-      if (this.buffs.scatter.shotsFired >= 3) {
-        this.deactivateItem('scatter');
-      }
-    }
-
-    const b = new Bullet(this.playerPos[0],this.playerPos[1],this.lastMoveDir[0],this.lastMoveDir[1],speedMult);
-    b.scatterType = scatterType;
-    if (scatterType === 1) b.scatterTimer = 15;
-    this.bullets.push(b);
-    this.shootCooldown=12;
-  }
-  dash(cost){
-    this.energy-=cost;const cfg=this.getConfig();this.dashCooldown=this.isGod()||this.difficulty==='EASY'?40:cfg.dashCd;
-    const dist=80;
-    if(this.keys['w'])this.playerPos[1]-=dist;else if(this.keys['s'])this.playerPos[1]+=dist;
-    else if(this.keys['a'])this.playerPos[0]-=dist;else if(this.keys['d'])this.playerPos[0]+=dist;
-    this.playerPos=this.checkCollision(this.playerPos,true);
-  }
-  handleAiLogic(){const a=this.aiPlayer.decide(this);if(a)this.aiPlayer.applyAction(this,a);}
-
-  update(){if(this.state!=='PLAYING')return;
-    if(this.gameOver||this.won){
-      if(this.mode==='WATCH'&&!this.restartTimer)this.restartTimer=performance.now();
-      if(this.mode==='WATCH'&&this.restartTimer&&performance.now()-this.restartTimer>1500){this.restartTimer=null;this.resetGame();this.gameOver=false;this.won=false;}
-      return;
-    }
-    if(this.mode==='WATCH')this.handleAiLogic();
-    if(this.tc)this.tc.applyInput();
-    const cfg=this.getConfig();
-    if(this.dashCooldown>0)this.dashCooldown--;if(this.shootCooldown>0)this.shootCooldown--;
-    const accel=0.28,fric=0.86;
-    let ax=0,ay=0;
-    if(this.keys['w'])ay-=accel;if(this.keys['s'])ay+=accel;
-    if(this.keys['a'])ax-=accel;if(this.keys['d'])ax+=accel;
-    this.playerVel[0]+=ax;this.playerVel[1]+=ay;
-    if(ax===0)this.playerVel[0]*=fric;if(ay===0)this.playerVel[1]*=fric;
-    let ms=cfg.maxSpeed;
-    // Boost: +40% max speed when shift held and boost active
-    if (this.boosting && this.buffs.boost.active) ms *= 1.4;
-    this.effectiveMaxSpeed = ms;
-    this.lastAccel = [ax, ay];
-    const spd=Math.hypot(this.playerVel[0],this.playerVel[1]);
-    if(spd>ms){this.playerVel[0]=(this.playerVel[0]/spd)*ms;this.playerVel[1]=(this.playerVel[1]/spd)*ms;}
-    this.moveDelta = [0, 0];
-    if(Math.abs(this.playerVel[0])>0.1||Math.abs(this.playerVel[1])>0.1){
-      const prevPx = this.playerPos[0], prevPy = this.playerPos[1];
-      const n=Math.hypot(this.playerVel[0],this.playerVel[1]);
-      if(n>0)this.lastMoveDir=[this.playerVel[0]/n,this.playerVel[1]/n];
-      this.playerPos[0]+=this.playerVel[0];this.playerPos=this.checkCollision(this.playerPos);
-      this.playerPos[1]+=this.playerVel[1];this.playerPos=this.checkCollision(this.playerPos);
-      this.moveDelta = [this.playerPos[0] - prevPx, this.playerPos[1] - prevPy];
-      // Boost: half energy drain
-      const drainMult = (this.boosting && this.buffs.boost.active) ? 0.5 : 1;
-      if(!this.isGod())this.energy-=cfg.energyDrain*drainMult;
-    }
-    // Stuck detection: wall-hugging → screen shake
-    const actualSpeed = this.moveDelta ? Math.hypot(this.moveDelta[0], this.moveDelta[1]) : 0;
-    const hasInput = this.keys['w'] || this.keys['s'] || this.keys['a'] || this.keys['d'];
-    if (hasInput && actualSpeed < 0.3) {
-      this.stuckFrames = (this.stuckFrames || 0) + 1;
-    } else {
-      this.stuckFrames = 0;
-    }
-    this.pings.slice().forEach(p=>{p.radius+=p.speed;if(p.radius>p.maxRadius){const i=this.pings.indexOf(p);if(i>=0)this.pings.splice(i,1);}else this.revealArea(p.pos,p.radius);});
-    if(!this.isBright()){
-      const fade=cfg.fadeRate;
-      Object.keys(this.visibility).forEach(k=>{if((this.visibilityTimer[k]||0)>0)this.visibilityTimer[k]--;else{this.visibility[k]*=fade;if(this.visibility[k]<0.01){delete this.visibility[k];delete this.visibilityTimer[k];}}});
-    }else{
-      const cx=floorDiv(this.playerPos[0],CELL_SIZE),cy=floorDiv(this.playerPos[1],CELL_SIZE);
-      for(let ox=-15;ox<15;ox++)for(let oy=-15;oy<15;oy++)this.visibility[`${cx+ox},${cy+oy}`]=1.0;
-    }
-    this.bullets.slice().forEach(b=>{b.update(this);if(b.dead){const i=this.bullets.indexOf(b);if(i>=0)this.bullets.splice(i,1);return;}
-      this.enemies.slice().forEach(e=>{
-        if(Math.hypot(b.pos[0]-e.pos[0],b.pos[1]-e.pos[1])<20){
-          e.hp-=b.damage;b.dead=true;
-          if(e.hp<=0){
-            const ex=e.pos[0], ey=e.pos[1];
-            const idx=this.enemies.indexOf(e);
-            if(idx>=0)this.enemies.splice(idx,1);
             this.score+=100;this.energy=Math.min(100,this.energy+cfg.killEnergy);
             this.spawnItemDrop(ex, ey);
           }
@@ -900,8 +574,9 @@ class EchoMaze {
   revealArea(pos,radius){for(let i=0;i<100;i++){const a=(i/100)*Math.PI*2,rx=pos[0]+Math.cos(a)*radius,ry=pos[1]+Math.sin(a)*radius,gx=floorDiv(rx,CELL_SIZE),gy=floorDiv(ry,CELL_SIZE);this.visibility[`${gx},${gy}`]=1.0;this.visibilityTimer[`${gx},${gy}`]=60;}}
 
   draw() {
-    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;ctx.clearRect(0,0,w,h);
-    if(this.state!=='PLAYING'){this.drawMenu();return;}
+    const ctx=this.ctx,w=this.cssWidth,h=this.cssHeight;ctx.clearRect(0,0,w,h);
+    if(this.state!=='PLAYING'&&this.state!=='MENU_PAUSE'){this.drawMenu();return;}
+    // Draw game (frozen during pause)
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     let shakeX = 0, shakeY = 0;
     if (this.stuckFrames > 30) {
@@ -909,9 +584,10 @@ class EchoMaze {
       shakeX = (Math.random() - 0.5) * intensity * 2;
       shakeY = (Math.random() - 0.5) * intensity * 2;
     }
-    const ox=w/2-this.playerPos[0] + shakeX, oy=h/2-this.playerPos[1] + shakeY;
-    const sGx=floorDiv(this.playerPos[0]-w/2,CELL_SIZE)-1,eGx=floorDiv(this.playerPos[0]+w/2,CELL_SIZE)+1;
-    const sGy=floorDiv(this.playerPos[1]-h/2,CELL_SIZE)-1,eGy=floorDiv(this.playerPos[1]+h/2,CELL_SIZE)+1;
+    const camX = w / 2, camY = h / 2;
+    const ox=camX-this.playerPos[0] + shakeX, oy=camY-this.playerPos[1] + shakeY;
+    const sGx=floorDiv(this.playerPos[0]-camX,CELL_SIZE)-1,eGx=floorDiv(this.playerPos[0]+(w-camX),CELL_SIZE)+1;
+    const sGy=floorDiv(this.playerPos[1]-camY,CELL_SIZE)-1,eGy=floorDiv(this.playerPos[1]+(h-camY),CELL_SIZE)+1;
     for(let gx=sGx;gx<=eGx;gx++)for(let gy=sGy;gy<=eGy;gy++){
       const vis=this.visibility[`${gx},${gy}`]||0;
       if(vis>0){
@@ -953,22 +629,22 @@ class EchoMaze {
       const alpha = 0.3 + Math.sin(performance.now()/150) * 0.15;
       ctx.strokeStyle = `rgba(0,191,255,${alpha})`;
       ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(w/2, h/2, 22, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(camX, camY, 22, 0, Math.PI*2); ctx.stroke();
       ctx.strokeStyle = `rgba(0,191,255,${alpha*0.5})`;
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(w/2, h/2, 30, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(camX, camY, 30, 0, Math.PI*2); ctx.stroke();
     }
     // Boost trail
     if (this.boosting && this.buffs.boost.active) {
       const t = performance.now() / 100;
       for (let i=0; i<3; i++) {
-        const tx = w/2 + Math.sin(t*8+i)*4, ty = h/2 + Math.cos(t*8+i)*4;
+        const tx = camX + Math.sin(t*8+i)*4, ty = camY + Math.cos(t*8+i)*4;
         ctx.fillStyle = `rgba(255,221,0,${0.6-i*0.15})`;
         ctx.beginPath(); ctx.arc(tx, ty, 3+i, 0, Math.PI*2); ctx.fill();
       }
     }
-    ctx.fillStyle=COLORS.player;ctx.beginPath();ctx.arc(w/2,h/2,10,0,Math.PI*2);ctx.fill();
-    this.drawPlayerIndicator(w, h);
+    ctx.fillStyle=COLORS.player;ctx.beginPath();ctx.arc(camX,camY,10*UI_SCALE,0,Math.PI*2);ctx.fill();
+    this.drawPlayerIndicator(camX, camY, w, h);
     this.pings.forEach(p=>{const a=1-p.radius/p.maxRadius;if(a>0){ctx.strokeStyle=`rgba(0,255,150,${a})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.pos[0]+ox,p.pos[1]+oy,p.radius,0,Math.PI*2);ctx.stroke();}});
     // Teleport particles
     if (this.teleportParticles) {
@@ -980,9 +656,9 @@ class EchoMaze {
       });
       ctx.globalAlpha = 1;
     }
-    const uiL=70;ctx.fillStyle='#222';ctx.fillRect(uiL,30,220,10);
-    if(this.energy>0){ctx.fillStyle=this.energy>30?COLORS.player:COLORS.enemy;ctx.fillRect(uiL,30,220*(this.energy/100),10);}
-    ctx.fillStyle=COLORS.text;ctx.font='14px system-ui,sans-serif';ctx.textAlign='left';
+    const uiL=70 * UI_SCALE;ctx.fillStyle='#222';ctx.fillRect(uiL,30,220 * UI_SCALE,10);
+    if(this.energy>0){ctx.fillStyle=this.energy>30?COLORS.player:COLORS.enemy;ctx.fillRect(uiL,30,220*UI_SCALE*(this.energy/100),10);}
+    ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.textAlign='left';
     ctx.fillText(`SCORE: ${this.score}`,uiL,70);
     ctx.fillText(`MODE: ${this.mode}`,uiL,100);
     ctx.fillText(`DIFFICULTY: ${this.difficulty}${this.isBright()?' +BRIGHT':''}${this.isGod()?' +GOD':''}`,uiL,124);
@@ -993,28 +669,31 @@ class EchoMaze {
       const alpha = pm.timer / 90;
       ctx.fillStyle = pm.color;
       ctx.globalAlpha = alpha;
-      ctx.font = 'bold 16px system-ui,sans-serif';
+      ctx.font = `bold ${Math.round(16*UI_SCALE)}px system-ui,sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(pm.text, w/2, 160 + i*22);
+      ctx.fillText(pm.text, w/2, 160 + i*22*UI_SCALE);
     });
     ctx.globalAlpha = 1;
     if(this.mode==='LEVEL'&&!this.gameOver&&!this.won)this.drawEdgeGoalArrow(w,h);
     if(this.gameOver||this.won){
       ctx.fillStyle='rgba(0,0,0,0.7)';ctx.fillRect(0,0,w,h);
-      ctx.fillStyle=this.won?COLORS.goal:COLORS.enemy;ctx.font='bold 52px system-ui,sans-serif';
+      ctx.fillStyle=this.won?COLORS.goal:COLORS.enemy;ctx.font=`bold ${Math.round(52*UI_SCALE)}px system-ui,sans-serif`;
       const msg=this.won?'YOU WON!':'GAME OVER',tw=ctx.measureText(msg).width;
       ctx.fillText(msg,w/2-tw/2,h/2-10);
-      ctx.fillStyle=COLORS.text;ctx.font='18px system-ui,sans-serif';const ht='Press R to return to menu',hw=ctx.measureText(ht).width;ctx.fillText(ht,w/2-hw/2,h/2+30);
+      ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;const ht='Press R to return to menu',hw=ctx.measureText(ht).width;ctx.fillText(ht,w/2-hw/2,h/2+30);
     }
-    if(this.messageTimer>0){this.messageTimer--;ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(w/2-170+10,20,340,36);ctx.fillStyle=COLORS.text;ctx.font='15px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(this.message,w/2+10,44);}
+    if(this.messageTimer>0){this.messageTimer--;ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(w/2-170+10,20,340,36);ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(15*UI_SCALE)}px system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(this.message,w/2+10,44);}
+
+    // Pause overlay
+    if(this.state==='MENU_PAUSE'){this.drawPauseOverlay(w,h);}
   }
 
   // --- DRAWING HELPERS ---
   drawItemShape(ctx, cx, cy, def) {
-    const r = 8;
+    const r = 8 * UI_SCALE;
     ctx.fillStyle = def.color;
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * UI_SCALE;
     ctx.beginPath();
     switch (def.shape) {
       case 'hex':
@@ -1033,9 +712,11 @@ class EchoMaze {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   drawInventory() {
-    const ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
-    const slotW = 70, slotH = 56, gap = 8, totalW = 4*slotW + 3*gap;
-    const startX = w/2 - totalW/2, y = h - slotH - 24;
+    const ctx = this.ctx, w = this.cssWidth, h = this.cssHeight;
+    // Scale inventory relative to UI scale
+    const slotW = Math.round(70 * UI_SCALE), slotH = Math.round(56 * UI_SCALE), gap = Math.round(8 * UI_SCALE);
+    const totalW = 4*slotW + 3*gap;
+    const startX = w/2 - totalW/2, y = h - slotH - Math.round(24 * UI_SCALE);
     ITEM_KEYS.forEach((type, i) => {
       const x = startX + i*(slotW+gap);
       const def = ITEM_DEFS[type];
@@ -1045,7 +726,7 @@ class EchoMaze {
       ctx.fillStyle = isActive ? def.color+'55' : COLORS.barBg;
       ctx.strokeStyle = isActive ? def.color : (hasItem ? COLORS.accentDim : COLORS.barBorder);
       ctx.lineWidth = isActive ? 2 : 1;
-      const radius = 6;
+      const radius = 6 * UI_SCALE;
       ctx.beginPath(); ctx.moveTo(x+radius,y); ctx.lineTo(x+slotW-radius,y);
       ctx.quadraticCurveTo(x+slotW,y,x+slotW,y+radius); ctx.lineTo(x+slotW,y+slotH-radius);
       ctx.quadraticCurveTo(x+slotW,y+slotH,x+slotW-radius,y+slotH); ctx.lineTo(x+radius,y+slotH);
@@ -1053,12 +734,12 @@ class EchoMaze {
       ctx.quadraticCurveTo(x,y,x+radius,y); ctx.closePath(); ctx.fill(); ctx.stroke();
       // Key number
       ctx.fillStyle = hasItem ? def.color : COLORS.textDim;
-      ctx.font = 'bold 16px system-ui,sans-serif';
+      ctx.font = `bold ${Math.round(16*UI_SCALE)}px system-ui,sans-serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(def.key, x+16, y+slotH-14);
+      ctx.fillText(def.key, x+16*UI_SCALE, y+slotH-14*UI_SCALE);
       // Item icon
       if (hasItem) {
-        this.drawItemShape(ctx, x+slotW-20, y+slotH/2, def);
+        this.drawItemShape(ctx, x+slotW-20*UI_SCALE, y+slotH/2, def);
       }
       // Active timer bar
       if (isActive) {
@@ -1085,14 +766,14 @@ class EchoMaze {
   }
 
   drawMenu() {
-    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,t=performance.now()/1000;
+    const ctx=this.ctx,w=this.cssWidth,h=this.cssHeight,t=performance.now()/1000;
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     this.updateMenuParticles();
     this.menuParticles.forEach(p=>{const a=p.life/p.ml;ctx.fillStyle=p.color;ctx.globalAlpha=0.75*a;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,p.size*a),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0;});
     for(let i=0;i<3;i++){const rad=220+i*140+Math.sin(t+i)*40;ctx.strokeStyle=`rgba(88,196,221,${Math.max(0,0.12-i*0.04)})`;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(w/2,h/2,rad,0,Math.PI*2);ctx.stroke();}
     const cx=w/2,by=h/4-20;ctx.textAlign='center';
-    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font='bold 56px system-ui,sans-serif';ctx.fillText('Echo Maze',cx,by);ctx.restore();
-    ctx.fillStyle=COLORS.accentDim;ctx.font='22px system-ui,sans-serif';ctx.fillText('Combat Edition',cx,by+58);
+    ctx.save();ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=24;ctx.fillStyle=COLORS.title;ctx.font=`bold ${Math.round(56*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('Echo Maze',cx,by);ctx.restore();
+    ctx.fillStyle=COLORS.accentDim;ctx.font=`${Math.round(22*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('Combat Edition',cx,by+58*UI_SCALE);
 
     if (this.menuTransition) {
       this.menuRects = [];
@@ -1123,47 +804,132 @@ class EchoMaze {
     let bottomY = h - 40;
 
     if (state === 'MENU_MODE') {
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';ctx.fillText('SELECT GAME MODE',cx,by+120);
-      const bw=Math.min(500,w*0.55), gap=62;
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('SELECT GAME MODE',cx,by+120*UI_SCALE);
+      const bw=Math.min(500,w*0.55), gap=62*UI_SCALE;
       const btns=[
         {label:'1. Survival',action:()=>{this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'2. Level',action:()=>{this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}},
-        {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}},
+        {label:'3. Watch AI (Hard)',action:()=>{this.mode='WATCH';this.difficulty='HARD';this.brightMode=false;this.godMode=false;this.state='PLAYING';this.resetGame();if(this.aiController){this.aiController.enabled=true;this.aiController.setUseLLM(false);this.aiController.initLLM().then(()=>{if(this.aiController.isLLMReady()){this.aiController.setUseLLM(true);}});}}},
+        {label:'T. Train AI (Hard)',action:()=>{this.state='MENU_TRAIN';}},
         {label:'L. Load Game',action:()=>this.loadGame()},
       ];
-      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
-      bottomY=by+160+btns.length*gap+50;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('Click or press key — ESC to return',cx,bottomY);
+      btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160*UI_SCALE+i*gap,bw,48*UI_SCALE,item.label,item.action);});
+      bottomY=by+160*UI_SCALE+btns.length*gap+50*UI_SCALE;
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('Click or press key — ESC to return',cx,bottomY);
     }
     else if (state === 'MENU_DIFFICULTY') {
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
-      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,by+120);
-      const bw=Math.min(440,w*0.5), gap=62;
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;
+      ctx.fillText(`${this.mode==='SURVIVAL'?'Survival':'Level'} — Select Difficulty`,cx,by+120*UI_SCALE);
+      const bw=Math.min(440,w*0.5), gap=62*UI_SCALE;
       const diffs=[
         {label:'1. Easy',action:()=>{this.difficulty='EASY';this.transitionTo('MENU_OPTIONS');}},
         {label:'2. Normal',action:()=>{this.difficulty='NORMAL';this.transitionTo('MENU_OPTIONS');}},
         {label:'3. Hard',action:()=>{this.difficulty='HARD';this.transitionTo('MENU_OPTIONS');}},
       ];
-      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
-      bottomY=by+160+diffs.length*gap+50;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('ESC to go back',cx,bottomY);
+      diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160*UI_SCALE+i*gap,bw,48*UI_SCALE,item.label,item.action);});
+      bottomY=by+160*UI_SCALE+diffs.length*gap+50*UI_SCALE;
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('ESC to go back',cx,bottomY);
     }
     else if (state === 'MENU_OPTIONS') {
       const ml=this.mode==='SURVIVAL'?'Survival':'Level';
-      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
-      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,by+120);
-      const tw=360, ty=by+175, tcx=cx-tw/2;
+      ctx.fillStyle=COLORS.text;ctx.font=`bold ${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;
+      ctx.fillText(`${ml} · ${this.getConfig().label} · Options`,cx,by+120*UI_SCALE);
+      const tw=360*UI_SCALE, ty=by+175*UI_SCALE, tcx=cx-tw/2;
       this.drawToggle(ctx,tcx,ty,'Bright Mode (full visibility)',this.brightMode,()=>this.brightMode=!this.brightMode);
-      this.drawToggle(ctx,tcx,ty+56,'God Mode (infinite energy)',this.godMode,()=>this.godMode=!this.godMode);
-      const startW=240;
-      this.drawMenuButton(ctx,cx,ty+140,startW,44,'Start Game',()=>{this.state='PLAYING';this.resetGame();});
-      bottomY=ty+200;
-      ctx.fillStyle=COLORS.textDim;ctx.font='14px system-ui,sans-serif';ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);
+      this.drawToggle(ctx,tcx,ty+56*UI_SCALE,'God Mode (infinite energy)',this.godMode,()=>this.godMode=!this.godMode);
+      const startW=240*UI_SCALE;
+      this.drawMenuButton(ctx,cx,ty+140*UI_SCALE,startW,44*UI_SCALE,'Start Game',()=>{this.state='PLAYING';this.resetGame();});
+      bottomY=ty+200*UI_SCALE;
+      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);
+    }
+    else if (state === 'MENU_TRAIN') {
+      ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
+      ctx.fillText('TRAIN AI (HARD)',cx,by+120);
+      
+      if(this.trainingState==='idle'){
+        ctx.fillStyle=COLORS.text;ctx.font='14px system-ui,sans-serif';
+        ctx.fillText('Hardware: M5 MacBook Pro 16GB',cx,by+170);
+        ctx.fillText(`Config: ${this.trainingConfig.episodes} episodes × ${this.trainingConfig.maxSteps} steps × ${this.trainingConfig.epochs} epochs`,cx,by+200);
+        ctx.fillText('Estimated time: ~15-20 minutes',cx,by+230);
+        const btnW=320;
+        this.drawMenuButton(ctx,cx,by+310,btnW,50,'🚀 START TRAINING',()=>this.startTraining());
+        bottomY=by+380;
+        ctx.fillStyle=COLORS.textDim;ctx.font='13px system-ui,sans-serif';
+        ctx.fillText('Training runs in background. Auto-integrates when complete.',cx,bottomY);
+      }
+      else if(this.trainingState==='training'||this.trainingState==='evaluating'){
+        ctx.fillStyle=COLORS.text;ctx.font='bold 16px system-ui,sans-serif';
+        const phase=this.trainingState==='training'?'TRAINING IN PROGRESS':'EVALUATING MODEL';
+        ctx.fillText(phase,cx,by+160);
+        const barW=400,barH=24,barX=cx-barW/2,barY=by+210;
+        ctx.fillStyle='#1a1f30'; ctx.fillRect(barX,barY,barW,barH);
+        ctx.fillStyle=COLORS.player; ctx.fillRect(barX,barY,barW*this.trainingProgress,barH);
+        ctx.strokeStyle=COLORS.accent;ctx.lineWidth=2; ctx.strokeRect(barX,barY,barW,barH);
+        ctx.fillStyle=COLORS.text;ctx.font='13px system-ui,sans-serif'; ctx.textAlign='center';
+        ctx.fillText(Math.round(this.trainingProgress*100)+'%',cx,barY+16);
+        ctx.textAlign='left';
+        const elapsed=Math.round(this.trainingElapsedTime);
+        const remaining=Math.round(Math.max(0,this.trainingEstimatedTime-elapsed));
+        ctx.fillStyle=COLORS.textDim;ctx.font='13px system-ui,sans-serif';
+        ctx.fillText(`Elapsed: ${elapsed}s  |  Remaining: ${remaining}s`,cx-180,by+280);
+        const logs=this.trainingLogs.slice(-3);
+        ctx.fillStyle=COLORS.textDim;ctx.font='12px monospace';
+        logs.forEach((log,i)=>ctx.fillText(log,cx-190,by+310+i*20));
+        bottomY=by+400;
+      }
+      else if(this.trainingState==='done'){
+        ctx.fillStyle=COLORS.goal;ctx.font='bold 24px system-ui,sans-serif';
+        ctx.fillText('✓ TRAINING COMPLETE',cx,by+180);
+        ctx.fillStyle=COLORS.text;ctx.font='14px system-ui,sans-serif';
+        ctx.fillText(this.trainingMessage,cx,by+230);
+        ctx.fillText('Model automatically integrated into Watch AI mode',cx,by+260);
+        const btnW=280;
+        this.drawMenuButton(ctx,cx,by+320,btnW,44,'🎮 Watch AI (Hard)',()=>{this.mode='WATCH';this.difficulty='HARD';this.brightMode=false;this.godMode=false;this.state='PLAYING';this.resetGame();if(this.aiController){this.aiController.enabled=true;this.aiController.setUseLLM(false);this.aiController.initLLM().then(()=>{if(this.aiController.isLLMReady()){this.aiController.setUseLLM(true);}});}});
+        this.drawMenuButton(ctx,cx,by+380,btnW,44,'🏠 Main Menu',()=>{this.state='MENU_MODE';this.trainingState='idle';});
+        bottomY=by+460;
+      }
+      else if(this.trainingState==='error'){
+        ctx.fillStyle=COLORS.enemy;ctx.font='bold 20px system-ui,sans-serif';
+        ctx.fillText('⚠ TRAINING FAILED',cx,by+180);
+        ctx.fillStyle=COLORS.text;ctx.font='13px system-ui,sans-serif';
+        ctx.fillText(this.trainingMessage,cx,by+230);
+        const btnW=240;
+        this.drawMenuButton(ctx,cx,by+310,btnW,44,'← Back',()=>{this.state='MENU_MODE';this.trainingState='idle';});
+        bottomY=by+380;
+      }
+      if(this.trainingState==='idle'){
+        ctx.fillStyle=COLORS.textDim;ctx.font='13px system-ui,sans-serif';
+        ctx.fillText('ESC to return',cx,bottomY);
+      }
     }
   }
 
+  drawPauseOverlay(w, h) {
+    const ctx=this.ctx, cx=w/2, cy=h/2;
+    // Semi-transparent dark overlay
+    ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(0,0,w,h);
+    // Panel
+    const pw=340*UI_SCALE, ph=220*UI_SCALE, px=cx-pw/2, py=cy-ph/2, r=12*UI_SCALE;
+    ctx.fillStyle=COLORS.panel;ctx.strokeStyle=COLORS.accentDim;ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(px+r,py);ctx.lineTo(px+pw-r,py);
+    ctx.quadraticCurveTo(px+pw,py,px+pw,py+r);ctx.lineTo(px+pw,py+ph-r);
+    ctx.quadraticCurveTo(px+pw,py+ph,px+pw-r,py+ph);ctx.lineTo(px+r,py+ph);
+    ctx.quadraticCurveTo(px,py+ph,px,py+ph-r);ctx.lineTo(px,py+r);
+    ctx.quadraticCurveTo(px,py,px+r,py);ctx.closePath();ctx.fill();ctx.stroke();
+    // Title
+    ctx.fillStyle=COLORS.title;ctx.font=`bold ${Math.round(26*UI_SCALE)}px system-ui,sans-serif`;ctx.textAlign='center';
+    ctx.fillText('Paused',cx,py+50*UI_SCALE);
+    // Buttons
+    const btnW=220*UI_SCALE, btnH=44*UI_SCALE, gap=56*UI_SCALE;
+    this.menuRects=[];
+    this.drawMenuButton(ctx,cx,py+100*UI_SCALE,btnW,btnH,'Resume (ESC)',()=>{this.state='PLAYING';});
+    this.drawMenuButton(ctx,cx,py+160*UI_SCALE,btnW,btnH,'Quit',()=>{this.state='MENU_MODE';});
+    ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(13*UI_SCALE)}px system-ui,sans-serif`;
+    ctx.fillText('Press ESC or click to resume',cx,py+ph-12*UI_SCALE);
+  }
+
   drawMenuButton(ctx, x, y, w, h, label, action){
-    const radius=8, lx=x-w/2, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x:lx,y,w,h});
+    const radius=8*UI_SCALE, lx=x-w/2, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x:lx,y,w,h});
     const lift=hover?-3:0;
     ctx.fillStyle=hover?'#141d30':COLORS.panel;
     ctx.strokeStyle=hover?COLORS.accent:COLORS.accentDim;
@@ -1173,13 +939,13 @@ class EchoMaze {
     ctx.quadraticCurveTo(lx+w,y+lift+h,lx+w-radius,y+lift+h);ctx.lineTo(lx+radius,y+lift+h);
     ctx.quadraticCurveTo(lx,y+lift+h,lx,y+lift+h-radius);ctx.lineTo(lx,y+lift+radius);
     ctx.quadraticCurveTo(lx,y+lift,lx+radius,y+lift);ctx.closePath();ctx.fill();ctx.stroke();
-    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font='bold 14px system-ui,sans-serif';
-    ctx.fillText(label,x,y+lift+h/2+5);
+    ctx.fillStyle=hover?COLORS.text:COLORS.textDim;ctx.font=`bold ${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;
+    ctx.fillText(label,x,y+lift+h/2+5*UI_SCALE);
     this.menuRects.push({rect:{x:lx,y,w,h},action});
   }
 
   drawToggle(ctx, x, y, label, on, action){
-    const w=360,h=42,radius=8, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
+    const w=360*UI_SCALE,h=42*UI_SCALE,radius=8*UI_SCALE, hover=this.pointInRect(this.mouse.x,this.mouse.y,{x,y,w,h});
     const lift=hover?-2:0;
     ctx.fillStyle=on?'rgba(88,196,221,0.08)':hover?'rgba(255,255,255,0.03)':COLORS.panel;
     ctx.strokeStyle=on?COLORS.accent:hover?'#3a3f50':'#2a2f40';
@@ -1189,16 +955,16 @@ class EchoMaze {
     ctx.quadraticCurveTo(x+w,y+lift+h,x+w-radius,y+lift+h);ctx.lineTo(x+radius,y+lift+h);
     ctx.quadraticCurveTo(x,y+lift+h,x,y+lift+h-radius);ctx.lineTo(x,y+lift+radius);
     ctx.quadraticCurveTo(x,y+lift,x+radius,y+lift);ctx.closePath();ctx.fill();ctx.stroke();
-    const dx=x+w-30,dy=y+lift+h/2,dr=12;
+    const dx=x+w-30*UI_SCALE,dy=y+lift+h/2,dr=12*UI_SCALE;
     ctx.fillStyle=on?COLORS.toggleOn:'#444';ctx.beginPath();ctx.arc(dx,dy,dr,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle=on?COLORS.text:COLORS.textDim;ctx.font='bold 13px system-ui,sans-serif';
-    ctx.textAlign='left';ctx.fillText(label,x+14,y+lift+28);ctx.textAlign='center';
+    ctx.fillStyle=on?COLORS.text:COLORS.textDim;ctx.font=`bold ${Math.round(13*UI_SCALE)}px system-ui,sans-serif`;
+    ctx.textAlign='left';ctx.fillText(label,x+14*UI_SCALE,y+lift+28*UI_SCALE);ctx.textAlign='center';
     this.menuRects.push({rect:{x,y,w,h},action});
   }
 
   // ──── Direction Indicator (independent component) ────
-  drawPlayerIndicator(w, h) {
-    const ctx = this.ctx, cx = w / 2, cy = h / 2;
+  drawPlayerIndicator(cx, cy, w, h) {
+    const ctx = this.ctx;
     const angle = Math.atan2(this.lastMoveDir[1], this.lastMoveDir[0]);
     // Comet trail — dynamic particles (uses actual movement, not velocity)
     const actualSpeed = this.moveDelta ? Math.hypot(this.moveDelta[0], this.moveDelta[1]) : 0;
@@ -1219,7 +985,7 @@ class EchoMaze {
       const numDots = Math.max(1, Math.ceil(trailFactor * MAX_DOTS));
       const spacing = trailFactor * (40 / MAX_DOTS);
       const alphaStart = trailFactor * 0.7;
-      const radiusStart = trailFactor * 5;
+      const radiusStart = trailFactor * 5 * UI_SCALE;
 
       for (let i = 0; i < numDots; i++) {
         const dist = (i + 0.6) * spacing;
@@ -1248,15 +1014,15 @@ class EchoMaze {
     // Ring — thin circle around player
     ctx.strokeStyle = COLORS.accent;
     ctx.globalAlpha = 0.45;
-    ctx.lineWidth = 1.8;
+    ctx.lineWidth = 1.8 * UI_SCALE;
     ctx.beginPath();
-    ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+    ctx.arc(cx, cy, 15 * UI_SCALE, 0, Math.PI * 2);
     ctx.stroke();
 
     // Arrow — points in movement direction
-    const tipDist  = 22.5;
-    const baseDist = 14;
-    const spread   = 6.5;
+    const tipDist  = 22.5 * UI_SCALE;
+    const baseDist = 14 * UI_SCALE;
+    const spread   = 6.5 * UI_SCALE;
     const tx = cx + Math.cos(angle) * tipDist;
     const ty = cy + Math.sin(angle) * tipDist;
     const lx = cx + Math.cos(angle) * baseDist + Math.cos(angle + Math.PI / 2) * spread;
@@ -1280,6 +1046,14 @@ class EchoMaze {
     if (!this._lastFrame) this._lastFrame = timestamp;
     const elapsed = timestamp - this._lastFrame;
     this._lastFrame = timestamp;
+
+    // Update touch input with delta (for variable refresh rate normalization)
+    if (this.touchInput) {
+      this.touchInput.update(elapsed);
+      // Update item button visual states
+      this.touchInput.updateItemButtonStates();
+    }
+
     this._acc = (this._acc || 0) + elapsed;
     const TICK = 16.6667;
     while (this._acc >= TICK) {
@@ -1287,7 +1061,6 @@ class EchoMaze {
       this._acc -= TICK;
     }
     this.draw();
-    if(this.tc)this.tc.draw(this.ctx);
     requestAnimationFrame(t=>this.frame(t));
   }
 }
