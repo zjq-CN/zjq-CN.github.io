@@ -35,9 +35,9 @@ const COLORS = {
 
 // Difficulty config: used when brightMode=false and godMode=false
 const DIFFICULTY_CONFIG = {
-  EASY:  { label:'Easy',    enemySpeed:0.7, triggerDist:250, maxSpeed:3.8, fadeRate:0.995, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
-  NORMAL:{ label:'Normal',  enemySpeed:1.5, triggerDist:450, maxSpeed:3.0, fadeRate:0.99, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
-  HARD:  { label:'Hard',    enemySpeed:2.5, triggerDist:800, maxSpeed:2.8, fadeRate:0.985, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
+  EASY:  { label:'Easy',    enemySpeed:0.7, triggerDist:250, maxSpeed:2.7, fadeRate:0.995, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
+  NORMAL:{ label:'Normal',  enemySpeed:1.5, triggerDist:450, maxSpeed:2.1, fadeRate:0.99, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
+  HARD:  { label:'Hard',    enemySpeed:2.5, triggerDist:800, maxSpeed:2.0, fadeRate:0.985, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
 };
 
 const ITEM_DEFS = {
@@ -231,7 +231,7 @@ class AiPlayer {
       this.aiController.applyAction(game, action);
       return;
     }
-    const s=0.28;
+    const s=0.196;
     if(action==='up')game.playerVel[1]-=s;if(action==='down')game.playerVel[1]+=s;
     if(action==='left')game.playerVel[0]-=s;if(action==='right')game.playerVel[0]+=s;
     if(action==='ping'&&game.energy>=15){game.emitPing();game.energy-=15;}
@@ -815,7 +815,7 @@ class EchoMaze {
     if(this.mode==='WATCH')this.handleAiLogic();
     const cfg=this.getConfig();
     if(this.dashCooldown>0)this.dashCooldown--;if(this.shootCooldown>0)this.shootCooldown--;
-    const accel=0.28,fric=0.86;
+    const accel=0.196,fric=0.86;
     let ax=0,ay=0;
     if(this.keys['w'])ay-=accel;if(this.keys['s'])ay+=accel;
     if(this.keys['a'])ax-=accel;if(this.keys['d'])ax+=accel;
@@ -1336,7 +1336,7 @@ class EchoMaze {
     const maxSpeed = this.effectiveMaxSpeed || 3.0;
     const speedRatio = clamp(actualSpeed / maxSpeed, 0, 1);
     const accelMag = this.lastAccel ? Math.hypot(this.lastAccel[0], this.lastAccel[1]) : 0;
-    const accelRatio = clamp(accelMag / 0.28, 0, 1);
+    const accelRatio = clamp(accelMag / 0.196, 0, 1);
 
     let trailFactor;
     if (speedRatio >= 0.95) {

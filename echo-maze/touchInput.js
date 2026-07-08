@@ -29,8 +29,8 @@ class TouchInput {
 
     if (this.active) {
       this.init();
-      this.showJoystick(); // Always show joystick on touch devices
-      this.hideGameControls();
+      this.show(); // Show the parent container
+      this.hideGameControls(); // But hide action buttons until game starts
     } else {
       this.hide();
     }
@@ -450,7 +450,7 @@ class TouchInput {
   refresh() {
     this.detectTouch();
     if (this.active) {
-      this.showJoystick();
+      this.show();
       if (this.game.state === 'PLAYING') this.showGameControls();
       this.onResize();
     } else {
