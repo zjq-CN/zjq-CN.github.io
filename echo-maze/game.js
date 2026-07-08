@@ -494,11 +494,376 @@ class EchoMaze {
     } else if (this.state === 'MENU_PAUSE') {
       this.state = 'PLAYING';
     }
-   
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
 
-... [OUTPUT TRUNCATED - 16742 chars omitted out of 66742 total] ...
+  onTouchPing() {
+    if (this.state !== 'PLAYING') return;
+    const cost = this.isGod() ? 0 : this.getConfig().pingCost;
+    if (this.energy >= cost) {
+      this.emitPing();
+      if (!this.isGod()) this.energy -= cost;
+      if (navigator.vibrate) navigator.vibrate(8);
+    }
+  }
 
+  onTouchDash() {
+    if (this.state !== 'PLAYING') return;
+    const cost = this.isGod() ? 0 : this.getConfig().dashCost;
+    if (this.dashCooldown <= 0 && this.energy >= cost) {
+      this.dash(cost);
+      if (navigator.vibrate) navigator.vibrate(25);
+    }
+  }
 
+  onTouchShoot() {
+    if (this.state !== 'PLAYING') return;
+    if (this.shootCooldown <= 0) {
+      this.shoot();
+      if (navigator.vibrate) navigator.vibrate(12);
+    }
+  }
+  onMouseMove(e){const r=this.canvas.getBoundingClientRect();this.mouse.x=e.clientX-r.left;this.mouse.y=e.clientY-r.top;}
+  onMouseDown(e){
+    const x=this.mouse.x,y=this.mouse.y;
+    this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(x,y,item.rect)&&item.action)item.action();});
+  }
+  pointInRect(x,y,rect){return x>=rect.x&&x<=rect.x+rect.w&&y>=rect.y&&y<=rect.y+rect.h;}
+
+  onKeyDown(event) {
+    // Close help overlay first
+    const overlay = document.getElementById('help-overlay');
+    if (event.key === 'Escape' && overlay && overlay.classList.contains('show')) {
+      overlay.classList.remove('show'); return;
+    }
+    // Block menu input during transition
+    if (this.menuTransition) return;
+    if(event.key==='Escape'){
+      if(this.state==='MENU_OPTIONS')this.transitionTo('MENU_DIFFICULTY');
+      else if(this.state==='MENU_DIFFICULTY')this.transitionTo('MENU_MODE');
+      else if(this.state==='MENU_TRAIN')this.state='MENU_MODE';
+      else if(this.state==='MENU_PAUSE'){this.state='PLAYING';}
+      else if(this.state==='PLAYING'){this.state='MENU_PAUSE';}
+    }
+
+    // Main menu: pick mode
+    if(this.state==='MENU_MODE'){
+      if(event.key==='1'){this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}
+      if(event.key==='2'){this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}
+      if(event.key==='3'){
+        this.mode='WATCH';this.difficulty='HARD';this.brightMode=false;this.godMode=false;this.state='PLAYING';this.resetGame();
+        // Enable AI controller for Watch mode
+        if(this.aiController){
+          this.aiController.enabled=true;
+          this.aiController.setUseLLM(false);
+          this.aiController.initLLM().then(()=>{
+            if(this.aiController.isLLMReady()){
+              this.aiController.setUseLLM(true);
+              console.log('✓ Watch AI using trained policy model');
+            } else {
+              console.log('⚠ Watch AI using rule-based fallback (train first!)');
+            }
+          });
+        }
+      }
+      if(event.key.toLowerCase()==='t'){this.state='MENU_TRAIN';}
+      if(event.key.toLowerCase()==='l')this.loadGame();
+    }
+
+    // Difficulty menu
+    if(this.state==='MENU_DIFFICULTY'){
+      if(event.key==='1'){this.difficulty='EASY';this.transitionTo('MENU_OPTIONS');}
+      if(event.key==='2'){this.difficulty='NORMAL';this.transitionTo('MENU_OPTIONS');}
+      if(event.key==='3'){this.difficulty='HARD';this.transitionTo('MENU_OPTIONS');}
+    }
+
+    // Toggles menu
+    if(this.state==='MENU_OPTIONS'){
+      if(event.key==='1')this.brightMode=!this.brightMode;
+      if(event.key==='2')this.godMode=!this.godMode;
+      if(event.key===' '||event.key==='Enter'){this.state='PLAYING';this.resetGame();}
+    }
+
+    // Playing
+    if(this.state==='PLAYING'){
+      // Item activation keys 1-4
+      if(event.key==='1'){ this.activateItem('shield'); return; }
+      if(event.key==='2'){ this.activateItem('scatter'); return; }
+      if(event.key==='3'){ this.activateItem('boost'); return; }
+      if(event.key==='4'){ this.activateItem('teleport'); return; }
+
+      if(event.key===' '){event.preventDefault();const c=this.isGod()?0:this.getConfig().pingCost;if(this.energy>=c){this.emitPing();if(!this.isGod())this.energy-=c;}}
+      // Shift: dash normally, or boost speed if boost active
+      if(event.key==='Shift'){
+        if (this.buffs.boost.active) {
+          this.boosting = true;
+        } else {
+          const c=this.isGod()?0:this.getConfig().dashCost;
+          if(this.dashCooldown<=0 && this.energy>=c) this.dash(c);
+        }
+      }
+      if(event.key.toLowerCase()==='s')this.saveGame();
+      if(event.key.toLowerCase()==='l')this.loadGame();
+      if(event.key.toLowerCase()==='n'){if(this.shootCooldown<=0)this.shoot();}
+      if(event.key.toLowerCase()==='r'&&(this.gameOver||this.won))this.state='MENU_MODE';
+    }
+    this.keys[event.key.toLowerCase()]=true;
+    // Also track shift in keys for onKeyUp
+    if (event.key === 'Shift') this.keys['shift'] = true;
+  }
+  onKeyUp(event){
+    this.keys[event.key.toLowerCase()]=false;
+    if (event.key === 'Shift') { this.keys['shift'] = false; this.boosting = false; }
+  }
+
+  resetGame(newSeed=true){
+    if(newSeed)this.seed=Math.floor(Math.random()*1_000_000);
+    this.chunks={};this.playerPos=[CELL_SIZE*1.5,CELL_SIZE*1.5];this.playerVel=[0,0];
+    this.energy=100;this.score=0;this.dashCooldown=0;this.shootCooldown=0;
+    this.visibility={};this.visibilityTimer={};this.pings=[];this.enemies=[];this.bullets=[];
+    this.gameOver=false;this.won=false;this.lastMoveDir=[1,0];
+    // Reset inventory & buffs
+    this.inventory = { shield:0, scatter:0, boost:0, teleport:0 };
+    this.buffs = { shield:{active:false,timer:0}, scatter:{active:false,shotsFired:0}, boost:{active:false,timer:0}, teleport:{active:false} };
+    this.boosting = false;
+    this.stuckFrames = 0;
+    this.moveDelta = [0, 0];
+    this.groundItems = [];
+    this.teleportParticles = [];
+    this.pickupMessages = [];
+    if(this.mode==='LEVEL')this.goalPos=[this.randInt(15,25)*CELL_SIZE,this.randInt(15,25)*CELL_SIZE];
+  }
+  randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
+
+  getChunk(gx,gy){
+    const cx=floorDiv(gx,CHUNK_SIZE),cy=floorDiv(gy,CHUNK_SIZE),key=`${cx},${cy}`;
+    if(!this.chunks[key]){
+      const seed=this.seed+cx*1000+cy;
+      this.chunks[key]=new Chunk(cx,cy,this.difficulty,seed);
+      const sp=new SeededRandom(seed), cfg=this.getConfig();
+      let cnt=sp.randInt(cfg.enemySpawn[0],cfg.enemySpawn[1]);
+      const safeR=3,psgx=floorDiv(this.playerPos[0],CELL_SIZE),psgy=floorDiv(this.playerPos[1],CELL_SIZE);
+      for(let cr=0,at=0;cr<cnt&&at<cnt*6;at++){
+        const lx=sp.randInt(0,CHUNK_SIZE-1),ly=sp.randInt(0,CHUNK_SIZE-1);
+        const wx=cx*CHUNK_SIZE+lx,wy=cy*CHUNK_SIZE+ly;
+        if(Math.abs(wx-psgx)<=safeR&&Math.abs(wy-psgy)<=safeR)continue;
+        this.enemies.push(new Enemy(wx*CELL_SIZE+CELL_SIZE/2,wy*CELL_SIZE+CELL_SIZE/2,cfg));cr++;
+      }
+    }
+    return this.chunks[key];
+  }
+
+  checkCollision(pos, isDashing=false){
+    const gx=floorDiv(pos[0],CELL_SIZE),gy=floorDiv(pos[1],CELL_SIZE);
+    const lx=((gx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE,ly=((gy%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
+    const chunk=this.getChunk(gx,gy),cell=chunk.cells[`${lx},${ly}`];
+    if(!cell)return pos;
+    const cx=gx*CELL_SIZE,cy=gy*CELL_SIZE,p=15,np=[pos[0],pos[1]];
+    if(isDashing){if(cell.walls[0]&&pos[1]<cy)cell.walls[0]=false;if(cell.walls[2]&&pos[1]>cy+CELL_SIZE)cell.walls[2]=false;if(cell.walls[3]&&pos[0]<cx)cell.walls[3]=false;if(cell.walls[1]&&pos[0]>cx+CELL_SIZE)cell.walls[1]=false;return np;}
+    if(cell.walls[0]&&pos[1]<cy+p)np[1]=cy+p;
+    if(cell.walls[2]&&pos[1]>cy+CELL_SIZE-p)np[1]=cy+CELL_SIZE-p;
+    if(cell.walls[3]&&pos[0]<cx+p)np[0]=cx+p;
+    if(cell.walls[1]&&pos[0]>cx+CELL_SIZE-p)np[0]=cx+CELL_SIZE-p;
+    return np;
+  }
+
+  saveGame(){
+    const d={playerPos:this.playerPos,energy:this.energy,score:this.score,seed:this.seed,mode:this.mode,difficulty:this.difficulty,brightMode:this.brightMode,godMode:this.godMode,visibility:this.visibility,visibilityTimer:this.visibilityTimer,goalPos:this.goalPos||null,
+      inventory:this.inventory, buffs:this.buffs, groundItems:this.groundItems};
+    localStorage.setItem('echoMazeSave',JSON.stringify(d));this.showMessage('Game saved.');
+  }
+  loadGame(){
+    const d=localStorage.getItem('echoMazeSave');
+    if(!d){this.showMessage('No save found.');return;}
+    try{
+      const p=JSON.parse(d);this.mode=p.mode;this.difficulty=p.difficulty;this.brightMode=p.brightMode||false;this.godMode=p.godMode||false;
+      this.resetGame(false);this.playerPos=p.playerPos;this.energy=p.energy;this.score=p.score;this.seed=p.seed;
+      this.visibility=p.visibility||{};this.visibilityTimer=p.visibilityTimer||{};
+      if(p.goalPos)this.goalPos=p.goalPos;
+      if(p.inventory)this.inventory=p.inventory;
+      if(p.buffs)Object.assign(this.buffs, p.buffs);
+      if(p.groundItems)this.groundItems=p.groundItems;
+      this.state='PLAYING';this.showMessage('Game loaded.');
+    }catch(e){this.showMessage('Unable to load save.');}
+  }
+  showMessage(text){this.message=text;this.messageTimer=120;}
+
+  // ──── Training Methods ────
+  async initTrainingServer() {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1000);
+      const resp = await fetch('http://127.0.0.1:9999/health', { signal: controller.signal });
+      clearTimeout(timeout);
+      if (resp.ok) {
+        this.trainingServerReady = true;
+        console.log('✓ Training server ready at :9999');
+      }
+    } catch (e) {
+      console.log('⚠ Training server not running (will start on demand)');
+      this.trainingServerReady = false;
+    }
+  }
+
+  async startTraining() {
+    this.trainingState = 'training';
+    this.trainingProgress = 0;
+    this.trainingMessage = '';
+    this.trainingLogs = [];
+    this.trainingStartTime = performance.now() / 1000;
+    this.trainingEstimatedTime = 900; // 15 minutes
+
+    const config = {
+      episodes: this.trainingConfig.episodes,
+      maxSteps: this.trainingConfig.maxSteps,
+      epochs: this.trainingConfig.epochs
+    };
+
+    try {
+      const response = await fetch('http://127.0.0.1:9999/start-training', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (!response.ok) {
+        this.trainingState = 'error';
+        this.trainingMessage = 'Failed to start training';
+        return;
+      }
+      const result = await response.json();
+      if (result.estimatedSeconds) this.trainingEstimatedTime = result.estimatedSeconds;
+      this.pollTrainingProgress();
+    } catch (e) {
+      this.trainingState = 'error';
+      this.trainingMessage = `Connection error: ${e.message}`;
+    }
+  }
+
+  async pollTrainingProgress() {
+    if (this.trainingState !== 'training' && this.trainingState !== 'evaluating') return;
+    try {
+      const response = await fetch('http://127.0.0.1:9999/training-status');
+      const status = await response.json();
+      this.trainingProgress = status.progress || 0;
+      this.trainingState = status.state || this.trainingState;
+      this.trainingMessage = status.message || '';
+      if (status.logs && status.logs.length > 0) {
+        this.trainingLogs = status.logs.slice(-5);
+      }
+      this.trainingElapsedTime = (performance.now() / 1000) - this.trainingStartTime;
+      if (this.trainingState === 'done') {
+        console.log('✓ Training completed!');
+        this.trainingMessage = 'Model trained and integrated successfully!';
+      } else if (this.trainingState === 'error') {
+        console.error('✗ Training failed');
+      } else {
+        setTimeout(() => this.pollTrainingProgress(), 500);
+      }
+    } catch (e) {
+      console.error('Poll error:', e);
+      setTimeout(() => this.pollTrainingProgress(), 1000);
+    }
+  }
+
+  emitPing(free=false){
+    const cfg=this.getConfig();
+    const r=this.isBright()||this.isGod()?1200:cfg.pingRadius;
+    const s=this.isBright()||this.isGod()?20:cfg.pingSpeed;
+    this.pings.push({pos:[...this.playerPos],radius:0,maxRadius:r,speed:s});
+    if (free) return;
+  }
+  shoot(){
+    let speedMult = 8;
+    const cfg=this.getConfig();
+    if (cfg.enemySpeed>1.6) speedMult=6;
+
+    let scatterType = 0;
+    if (this.buffs.scatter.active) {
+      if (this.buffs.scatter.shotsFired < 2) {
+        scatterType = 1; // split after timer
+      } else if (this.buffs.scatter.shotsFired === 2) {
+        scatterType = 2; // split on wall
+      }
+      this.buffs.scatter.shotsFired++;
+      if (this.buffs.scatter.shotsFired >= 3) {
+        this.deactivateItem('scatter');
+      }
+    }
+
+    const b = new Bullet(this.playerPos[0],this.playerPos[1],this.lastMoveDir[0],this.lastMoveDir[1],speedMult);
+    b.scatterType = scatterType;
+    if (scatterType === 1) b.scatterTimer = 15;
+    this.bullets.push(b);
+    this.shootCooldown=12;
+  }
+  dash(cost){
+    this.energy-=cost;const cfg=this.getConfig();this.dashCooldown=this.isGod()||this.difficulty==='EASY'?40:cfg.dashCd;
+    const dist=80;
+    if(this.keys['w'])this.playerPos[1]-=dist;else if(this.keys['s'])this.playerPos[1]+=dist;
+    else if(this.keys['a'])this.playerPos[0]-=dist;else if(this.keys['d'])this.playerPos[0]+=dist;
+    this.playerPos=this.checkCollision(this.playerPos,true);
+  }
+  handleAiLogic(){const a=this.aiPlayer.decide(this);if(a)this.aiPlayer.applyAction(this,a);}
+
+  update(){
+    if(this.state!=='PLAYING')return;
+    if(this.gameOver||this.won){
+      if(this.mode==='WATCH'&&!this.restartTimer)this.restartTimer=performance.now();
+      if(this.mode==='WATCH'&&this.restartTimer&&performance.now()-this.restartTimer>1500){this.restartTimer=null;this.resetGame();this.gameOver=false;this.won=false;}
+      return;
+    }
+    if(this.mode==='WATCH')this.handleAiLogic();
+    const cfg=this.getConfig();
+    if(this.dashCooldown>0)this.dashCooldown--;if(this.shootCooldown>0)this.shootCooldown--;
+    const accel=0.28,fric=0.86;
+    let ax=0,ay=0;
+    if(this.keys['w'])ay-=accel;if(this.keys['s'])ay+=accel;
+    if(this.keys['a'])ax-=accel;if(this.keys['d'])ax+=accel;
+    this.playerVel[0]+=ax;this.playerVel[1]+=ay;
+    if(ax===0)this.playerVel[0]*=fric;if(ay===0)this.playerVel[1]*=fric;
+    let ms=cfg.maxSpeed;
+    // Boost: +40% max speed when shift held and boost active
+    if (this.boosting && this.buffs.boost.active) ms *= 1.4;
+    this.effectiveMaxSpeed = ms;
+    this.lastAccel = [ax, ay];
+    const spd=Math.hypot(this.playerVel[0],this.playerVel[1]);
+    if(spd>ms){this.playerVel[0]=(this.playerVel[0]/spd)*ms;this.playerVel[1]=(this.playerVel[1]/spd)*ms;}
+    this.moveDelta = [0, 0];
+    if(Math.abs(this.playerVel[0])>0.1||Math.abs(this.playerVel[1])>0.1){
+      const prevPx = this.playerPos[0], prevPy = this.playerPos[1];
+      const n=Math.hypot(this.playerVel[0],this.playerVel[1]);
+      if(n>0)this.lastMoveDir=[this.playerVel[0]/n,this.playerVel[1]/n];
+      this.playerPos[0]+=this.playerVel[0];this.playerPos=this.checkCollision(this.playerPos);
+      this.playerPos[1]+=this.playerVel[1];this.playerPos=this.checkCollision(this.playerPos);
+      this.moveDelta = [this.playerPos[0] - prevPx, this.playerPos[1] - prevPy];
+      // Boost: half energy drain
+      const drainMult = (this.boosting && this.buffs.boost.active) ? 0.5 : 1;
+      if(!this.isGod())this.energy-=cfg.energyDrain*drainMult;
+    }
+    // Stuck detection: wall-hugging → screen shake
+    const actualSpeed = this.moveDelta ? Math.hypot(this.moveDelta[0], this.moveDelta[1]) : 0;
+    const hasInput = this.keys['w'] || this.keys['s'] || this.keys['a'] || this.keys['d'];
+    if (hasInput && actualSpeed < 0.3) {
+      this.stuckFrames = (this.stuckFrames || 0) + 1;
+    } else {
+      this.stuckFrames = 0;
+    }
+    this.pings.slice().forEach(p=>{p.radius+=p.speed;if(p.radius>p.maxRadius){const i=this.pings.indexOf(p);if(i>=0)this.pings.splice(i,1);}else this.revealArea(p.pos,p.radius);});
+    if(!this.isBright()){
+      const fade=cfg.fadeRate;
+      Object.keys(this.visibility).forEach(k=>{if((this.visibilityTimer[k]||0)>0)this.visibilityTimer[k]--;else{this.visibility[k]*=fade;if(this.visibility[k]<0.01){delete this.visibility[k];delete this.visibilityTimer[k];}}});
+    }else{
+      const cx=floorDiv(this.playerPos[0],CELL_SIZE),cy=floorDiv(this.playerPos[1],CELL_SIZE);
+      for(let ox=-15;ox<15;ox++)for(let oy=-15;oy<15;oy++)this.visibility[`${cx+ox},${cy+oy}`]=1.0;
+    }
+    this.bullets.slice().forEach(b=>{b.update(this);if(b.dead){const i=this.bullets.indexOf(b);if(i>=0)this.bullets.splice(i,1);return;}
+      this.enemies.slice().forEach(e=>{
+        if(Math.hypot(b.pos[0]-e.pos[0],b.pos[1]-e.pos[1])<20){
+          e.hp-=b.damage;b.dead=true;
+          if(e.hp<=0){
+            const ex=e.pos[0], ey=e.pos[1];
+            const idx=this.enemies.indexOf(e);
+            if(idx>=0)this.enemies.splice(idx,1);
             this.score+=100;this.energy=Math.min(100,this.energy+cfg.killEnergy);
             this.spawnItemDrop(ex, ey);
           }

@@ -334,8 +334,6 @@ canvas {
 }
 
 /* ─── Screen Size Adaptations (JS handles sizing/positioning) ─── */
-/* These only add CSS-level tweaks that JS doesn't touch */
-
 /* Very small screens — tighten up gaps */
 @media (max-height: 380px) and (orientation: landscape) {
   #action-buttons { gap: 3px !important; }

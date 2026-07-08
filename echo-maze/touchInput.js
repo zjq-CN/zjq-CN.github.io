@@ -109,8 +109,6 @@ class TouchInput {
     const isLandscape = w > h;
 
     // ── JOYSTICK (left side) ──
-    // Landscape: constrain by height (vertical space limited)
-    // Portrait: constrain by width
     const jsBase = isLandscape
       ? Math.max(70, Math.min(120, h * 0.22))
       : Math.max(80, Math.min(130, w * 0.2));
@@ -122,12 +120,10 @@ class TouchInput {
     zone.style.height = zoneSize + 'px';
     zone.style.left = Math.max(8, w * 0.02) + 'px';
     if (isLandscape) {
-      // Landscape: push joystick down toward bottom-left
       zone.style.top = 'auto';
       zone.style.bottom = Math.max(10, h * 0.12) + 'px';
       zone.style.transform = '';
     } else {
-      // Portrait: vertically centered on left
       zone.style.top = '50%';
       zone.style.bottom = 'auto';
       zone.style.transform = 'translateY(-50%)';
@@ -140,8 +136,7 @@ class TouchInput {
     this.joystickThumb.style.width = thumbSize + 'px';
     this.joystickThumb.style.height = thumbSize + 'px';
 
-    // ── ACTION BUTTONS (right side, vertical stack) ──
-    // Scale with available vertical height
+    // ── ACTION BUTTONS (right side) ──
     const actScale = isLandscape ? h : w;
     const btnSize = Math.max(44, Math.min(64, actScale * 0.1));
     const btnGap = Math.max(4, Math.min(8, actScale * 0.01));
@@ -156,7 +151,6 @@ class TouchInput {
       actionContainer.style.gap = btnGap + 'px';
       actionContainer.style.right = Math.max(10, w * 0.03) + 'px';
       if (isLandscape) {
-        // Landscape: push buttons toward bottom-right
         actionContainer.style.top = 'auto';
         actionContainer.style.bottom = Math.max(10, h * 0.1) + 'px';
         actionContainer.style.transform = '';
