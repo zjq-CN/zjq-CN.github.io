@@ -108,10 +108,10 @@ class TouchInput {
     const minDim = Math.min(w, h);
     const isLandscape = w > h;
 
-    // ── JOYSTICK (left side) ──
+    // ── JOYSTICK (bottom-left corner) ──
     const jsBase = isLandscape
-      ? Math.max(70, Math.min(120, h * 0.22))
-      : Math.max(80, Math.min(130, w * 0.2));
+      ? Math.max(55, Math.min(95, h * 0.18))
+      : Math.max(65, Math.min(105, w * 0.17));
     this.joystickRadius = jsBase / 2;
 
     const zone = this.joystickZone;
@@ -119,15 +119,10 @@ class TouchInput {
     zone.style.width = zoneSize + 'px';
     zone.style.height = zoneSize + 'px';
     zone.style.left = Math.max(8, w * 0.02) + 'px';
-    if (isLandscape) {
-      zone.style.top = 'auto';
-      zone.style.bottom = Math.max(10, h * 0.12) + 'px';
-      zone.style.transform = '';
-    } else {
-      zone.style.top = '50%';
-      zone.style.bottom = 'auto';
-      zone.style.transform = 'translateY(-50%)';
-    }
+    // Always anchor to bottom-left
+    zone.style.top = 'auto';
+    zone.style.bottom = Math.max(10, h * 0.1) + 'px';
+    zone.style.transform = '';
 
     this.joystickBase.style.width = (jsBase * 2) + 'px';
     this.joystickBase.style.height = (jsBase * 2) + 'px';
