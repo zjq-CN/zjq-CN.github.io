@@ -29,10 +29,14 @@ class TouchInput {
 
     if (this.active) {
       this.init();
-      this.show();
+      this.showJoystick(); // Always show joystick on touch devices
+      this.hideGameControls();
     } else {
       this.hide();
     }
+    // Menu navigation state
+    this.menuSelectIdx = -1;
+    this.menuSelectCooldown = 0;
 
     // Listen for resize to update joystick layout
     window.addEventListener('resize', () => this.onResize());
@@ -222,6 +226,20 @@ class TouchInput {
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
       if (e.changedTouches[i].identifier === this.joystickId) {
+        // If in menu and an item was selected, trigger click
+        const g = this.game;
+        if (this.menuSelectIdx >= 0 && g.state !== 'PLAYING' && g.state !== 'MENU_PAUSE') {
+          const rects = g.menuRects;
+          if (rects && this.menuSelectIdx < rects.length) {
+            const r = rects[this.menuSelectIdx].rect;
+            g.mouse.x = r.x + r.w / 2;
+            g.mouse.y = r.y + r.h / 2;
+            // Fire mousedown at the rect position to activate the button
+            if (rects[this.menuSelectIdx].action) rects[this.menuSelectIdx].action();
+          }
+        }
+        this.menuSelectIdx = -1;
+        this._menuNavActive = false;
         this.joystickActive = false;
         this.joystickId = null;
         this.joystickVec = { x: 0, y: 0 };
@@ -326,19 +344,84 @@ class TouchInput {
   // --- Frame update (called from game loop) ---
   update(deltaMs) {
     if (!this.active) return;
-    // deltaMs is the frame delta in ms; normalize for variable refresh rates
-    const normFactor = deltaMs / 16.6667; // normalize to 60fps
-
-    // Accumulate joystick input across variable frame times
+    const normFactor = deltaMs / 16.6667;
     this.inputAccumulator.x += this.joystickVec.x * normFactor;
     this.inputAccumulator.y += this.joystickVec.y * normFactor;
 
-    // Apply to game keys
+    // Update visibility based on game state
+    const state = this.game.state;
+    const inPlay = state === 'PLAYING';
+    if (inPlay) {
+      this.showGameControls();
+    } else {
+      this.hideGameControls();
+    }
+
+    // Menu navigation via joystick
+    if (!inPlay && state !== 'MENU_PAUSE') {
+      this.updateMenuNav();
+      return; // Don't apply WASD in menu
+    }
+
+    // Apply to game keys (only during gameplay)
     const threshold = 0.15;
     this.game.keys['w'] = this.joystickVec.y < -threshold;
     this.game.keys['s'] = this.joystickVec.y > threshold;
     this.game.keys['a'] = this.joystickVec.x < -threshold;
     this.game.keys['d'] = this.joystickVec.x > threshold;
+  }
+
+  updateMenuNav() {
+    const g = this.game;
+    if (this.menuSelectCooldown > 0) { this.menuSelectCooldown--; return; }
+    const rects = g.menuRects;
+    if (!rects || rects.length === 0) return;
+
+    const joyY = this.joystickVec.y;
+    const threshold = 0.35;
+
+    // Navigate on joystick Y movement
+    if (Math.abs(joyY) > threshold && !this._menuNavActive) {
+      this._menuNavActive = true;
+      if (joyY < -threshold) {
+        // Up → previous item
+        this.menuSelectIdx = Math.max(0, (this.menuSelectIdx <= 0 ? rects.length : this.menuSelectIdx) - 1);
+      } else if (joyY > threshold) {
+        // Down → next item
+        this.menuSelectIdx = Math.min(rects.length - 1, this.menuSelectIdx + 1);
+      }
+      // Move mouse to selected rect
+      if (this.menuSelectIdx >= 0 && this.menuSelectIdx < rects.length) {
+        const r = rects[this.menuSelectIdx].rect;
+        g.mouse.x = r.x + r.w / 2;
+        g.mouse.y = r.y + r.h / 2;
+      }
+    } else if (Math.abs(joyY) <= threshold) {
+      this._menuNavActive = false;
+    }
+  }
+
+  showJoystick() {
+    const zone = this.joystickZone;
+    if (zone) zone.style.display = 'flex';
+  }
+
+  showGameControls() {
+    const act = document.getElementById('action-buttons');
+    const items = document.getElementById('item-buttons');
+    const pause = document.getElementById('touch-pause-btn');
+    if (act) act.style.display = 'flex';
+    if (items) items.style.display = 'flex';
+    if (pause) pause.style.display = 'flex';
+  }
+
+  hideGameControls() {
+    const act = document.getElementById('action-buttons');
+    const items = document.getElementById('item-buttons');
+    const pause = document.getElementById('touch-pause-btn');
+    if (act) act.style.display = 'none';
+    if (items) items.style.display = 'none';
+    if (pause) pause.style.display = 'none';
   }
 
   show() {
@@ -367,7 +450,8 @@ class TouchInput {
   refresh() {
     this.detectTouch();
     if (this.active) {
-      this.show();
+      this.showJoystick();
+      if (this.game.state === 'PLAYING') this.showGameControls();
       this.onResize();
     } else {
       this.hide();
