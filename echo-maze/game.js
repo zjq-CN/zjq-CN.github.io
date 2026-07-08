@@ -494,7 +494,7 @@ class EchoMaze {
   }
   updateMenuParticles() {
     if(!this.menuAnimating)return;
-    const w=this.canvas.width,h=this.canvas.height;
+    const w=this.w,h=this.h;
     for(let i=this.menuParticles.length-1;i>=0;i--){
       const p=this.menuParticles[i];p.x+=p.sx;p.y+=p.sy;p.life--;
       if(p.x<0||p.x>w)p.sx*=-1;if(p.y<0||p.y>h)p.sy*=-1;
@@ -503,14 +503,11 @@ class EchoMaze {
     while(this.menuParticles.length<(this.controlMode==='touch'?20:45))this.spawnMenuParticle();
   }
   resize(){
-    const dpr=Math.min(window.devicePixelRatio||1,2);
-    this.canvas.width=window.innerWidth*dpr;this.canvas.height=window.innerHeight*dpr;
-    this.canvas.style.width=window.innerWidth+'px';this.canvas.style.height=window.innerHeight+'px';
-    this.ctx.setTransform(dpr,0,0,dpr,0,0);this._dpr=dpr;
+    this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;
     if(this.touchCtrl)this.touchCtrl.layout();this.checkLandscape();
   }
-  get w(){return window.innerWidth;}
-  get h(){return window.innerHeight;}
+  get w(){return this.canvas.width;}
+  get h(){return this.canvas.height;}
   initTouchControls(){
     this.touchCtrl=new TouchController(this);
     this.canvas.addEventListener('touchstart',e=>{
@@ -595,11 +592,7 @@ class EchoMaze {
     if(this.state==='MENU_MODE'){
       if(event.key==='1'){this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}
       if(event.key==='2'){this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}
-      if(event.key==='3'){this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;
-    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
-    this.controlMode=this._autoTouch?'touch':'keyboard';
-    this.touchCtrl=null;
-    this.rotateDismissed=false;this.state='PLAYING';this.resetGame();}
+      if(event.key==='3'){this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}
       if(event.key.toLowerCase()==='l')this.loadGame();
     }
 
@@ -1136,11 +1129,7 @@ class EchoMaze {
       const btns=[
         {label:'1. Survival',action:()=>{this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'2. Level',action:()=>{this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}},
-        {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;
-    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
-    this.controlMode=this._autoTouch?'touch':'keyboard';
-    this.touchCtrl=null;
-    this.rotateDismissed=false;this.state='PLAYING';this.resetGame();}},
+        {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}},
         {label:'L. Load Game',action:()=>this.loadGame()},
       ];
       const btnStartY=titleY+Math.round(28*tScale);
