@@ -216,6 +216,135 @@ class AiPlayer {
   }
 }
 
+
+class TouchController {
+  constructor(game) {
+    this.game = game;
+    this.joystick = { active: false, touchId: null, baseX: 0, baseY: 0, knobX: 0, knobY: 0, dx: 0, dy: 0 };
+    this.joystickRadius = 60;
+    this.knobRadius = 20;
+    this.joystickHotzone = 30;
+    this.buttons = [
+      { id: 'shoot', label: 'N', color: '#ff3b4a', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
+      { id: 'sonar', label: 'S', color: '#00ff96', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
+      { id: 'dash',  label: 'D', color: '#00bfff', touchId: null, pressed: false, x: 0, y: 0, radius: 28 },
+    ];
+    this.itemSlots = [
+      { type: 'shield',   touchId: null },
+      { type: 'scatter',  touchId: null },
+      { type: 'boost',    touchId: null },
+      { type: 'teleport', touchId: null },
+    ];
+    this.layout();
+  }
+  layout() {
+    const w = this.game.w || this.game.canvas.width, h = this.game.h || this.game.canvas.height;
+    this.joystick.baseX = 100;
+    this.joystick.baseY = h - 100;
+    this.joystick.knobX = this.joystick.baseX;
+    this.joystick.knobY = this.joystick.baseY;
+    const bx = w - 100, by = h - 100;
+    this.buttons[0].x = bx + 55; this.buttons[0].y = by;
+    this.buttons[1].x = bx;      this.buttons[1].y = by - 55;
+    this.buttons[2].x = bx;      this.buttons[2].y = by + 55;
+    const slotW = 60, gap = 8, totalW = 4 * slotW + 3 * gap;
+    const startX = w / 2 - totalW / 2;
+    for (let i = 0; i < 4; i++) {
+      this.itemSlots[i].x = startX + i * (slotW + gap);
+      this.itemSlots[i].y = h - 56 - 24;
+      this.itemSlots[i].w = slotW;
+      this.itemSlots[i].h = 56;
+    }
+  }
+  handleTouchStart(e) {
+    const g = this.game;
+    for (const t of e.changedTouches) {
+      const tx = t.clientX, ty = t.clientY;
+      const jx = this.joystick.baseX, jy = this.joystick.baseY;
+      const jr = this.joystickRadius + this.joystickHotzone;
+      if (Math.hypot(tx - jx, ty - jy) < jr && !this.joystick.active) {
+        this.joystick.active = true; this.joystick.touchId = t.identifier;
+        this.updateJoystickPos(tx, ty); continue;
+      }
+      for (const btn of this.buttons) {
+        if (Math.hypot(tx - btn.x, ty - btn.y) < btn.radius + 12 && !btn.pressed) {
+          btn.pressed = true; btn.touchId = t.identifier; this.triggerButton(btn.id);
+        }
+      }
+      for (let i = 0; i < 4; i++) {
+        const slot = this.itemSlots[i];
+        if (tx >= slot.x && tx <= slot.x + slot.w && ty >= slot.y && ty <= slot.y + slot.h) {
+          slot.touchId = t.identifier;
+          g.activateItem(['shield','scatter','boost','teleport'][i]);
+        }
+      }
+    }
+  }
+  handleTouchMove(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === this.joystick.touchId) this.updateJoystickPos(t.clientX, t.clientY);
+    }
+  }
+  handleTouchEnd(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === this.joystick.touchId) {
+        this.joystick.active = false; this.joystick.touchId = null;
+        this.joystick.knobX = this.joystick.baseX; this.joystick.knobY = this.joystick.baseY;
+        this.joystick.dx = 0; this.joystick.dy = 0;
+      }
+      for (const btn of this.buttons) {
+        if (t.identifier === btn.touchId) { btn.pressed = false; btn.touchId = null; }
+      }
+      for (const slot of this.itemSlots) {
+        if (t.identifier === slot.touchId) slot.touchId = null;
+      }
+    }
+  }
+  updateJoystickPos(tx, ty) {
+    const jx = this.joystick.baseX, jy = this.joystick.baseY;
+    let dx = tx - jx, dy = ty - jy;
+    const dist = Math.hypot(dx, dy), maxR = this.joystickRadius;
+    if (dist > maxR) { dx = (dx / dist) * maxR; dy = (dy / dist) * maxR; }
+    this.joystick.knobX = jx + dx; this.joystick.knobY = jy + dy;
+    this.joystick.dx = dx / maxR; this.joystick.dy = dy / maxR;
+  }
+  triggerButton(id) {
+    const g = this.game;
+    if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
+    if (id === 'shoot' && g.shootCooldown <= 0) g.shoot();
+    if (id === 'sonar') {
+      const c = g.isGod() ? 0 : g.getConfig().pingCost;
+      if (g.energy >= c) { g.emitPing(); if (!g.isGod()) g.energy -= c; }
+    }
+    if (id === 'dash') {
+      if (g.buffs.boost.active) { g.boosting = true; }
+      else { const c = g.isGod() ? 0 : g.getConfig().dashCost; if (g.dashCooldown <= 0 && g.energy >= c) g.dash(c); }
+    }
+  }
+  applyMovement() {
+    const g = this.game;
+    if (g.state !== 'PLAYING' || g.paused || g.gameOver || g.won) return;
+    const accel = 0.28, deadzone = 0.15;
+    if (Math.abs(this.joystick.dx) > deadzone) g.playerVel[0] += this.joystick.dx * accel * 1.2;
+    if (Math.abs(this.joystick.dy) > deadzone) g.playerVel[1] += this.joystick.dy * accel * 1.2;
+  }
+  draw(ctx) {
+    if (this.game.state !== 'PLAYING' || this.game.paused) return;
+    ctx.globalAlpha = 0.3; ctx.strokeStyle = '#58c4dd'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(this.joystick.baseX, this.joystick.baseY, this.joystickRadius, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = this.joystick.active ? 0.6 : 0.35; ctx.fillStyle = '#58c4dd';
+    ctx.beginPath(); ctx.arc(this.joystick.knobX, this.joystick.knobY, this.knobRadius, 0, Math.PI*2); ctx.fill();
+    for (const btn of this.buttons) {
+      ctx.globalAlpha = btn.pressed ? 0.7 : 0.4; ctx.fillStyle = btn.color;
+      ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = btn.pressed ? 1 : 0.8; ctx.fillStyle = '#fff';
+      ctx.font = 'bold 14px system-ui,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(btn.label, btn.x, btn.y + 5);
+    }
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
+}
+
 class EchoMaze {
   constructor() {
     this.canvas=document.getElementById('game-canvas');
@@ -231,6 +360,10 @@ class EchoMaze {
     this.difficulty='NORMAL';
     this.brightMode=false;
     this.godMode=false;
+    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
+    this.controlMode=this._autoTouch?'touch':'keyboard';
+    this.touchCtrl=null;
+    this.rotateDismissed=false;
     this.aiPlayer=new AiPlayer();
     this.message='';this.messageTimer=0;
     this.seed=Math.floor(Math.random()*1_000_000);
@@ -248,6 +381,7 @@ class EchoMaze {
     // --- end NEW ---
     this.resetGame();
     this.bindEvents();
+    this.initTouchControls();
     requestAnimationFrame(t=>this.frame(t));
   }
 
@@ -354,9 +488,49 @@ class EchoMaze {
       if(p.x<0||p.x>w)p.sx*=-1;if(p.y<0||p.y>h)p.sy*=-1;
       if(p.life<=0)this.menuParticles.splice(i,1);
     }
-    while(this.menuParticles.length<45)this.spawnMenuParticle();
+    while(this.menuParticles.length<(this.controlMode==='touch'?20:45))this.spawnMenuParticle();
   }
-  resize(){this.canvas.width=window.innerWidth;this.canvas.height=window.innerHeight;}
+  resize(){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    this.canvas.width=window.innerWidth*dpr;this.canvas.height=window.innerHeight*dpr;
+    this.canvas.style.width=window.innerWidth+'px';this.canvas.style.height=window.innerHeight+'px';
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);this._dpr=dpr;
+    if(this.touchCtrl)this.touchCtrl.layout();this.checkLandscape();
+  }
+  get w(){return window.innerWidth;}
+  get h(){return window.innerHeight;}
+  initTouchControls(){
+    this.touchCtrl=new TouchController(this);
+    this.canvas.addEventListener('touchstart',e=>{e.preventDefault();if(this.controlMode==='touch'&&this.state==='PLAYING')this.touchCtrl.handleTouchStart(e);},{passive:false});
+    this.canvas.addEventListener('touchmove',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchMove(e);},{passive:false});
+    this.canvas.addEventListener('touchend',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
+    this.canvas.addEventListener('touchcancel',e=>{e.preventDefault();if(this.controlMode==='touch')this.touchCtrl.handleTouchEnd(e);},{passive:false});
+    window.addEventListener('orientationchange',()=>setTimeout(()=>this.checkLandscape(),200));
+    window.addEventListener('resize',()=>this.checkLandscape());
+    const dismiss=document.getElementById('rotate-dismiss');
+    if(dismiss)dismiss.addEventListener('click',()=>{this.rotateDismissed=true;this.checkLandscape();});
+    this.setupControlSwitcher();
+  }
+  setupControlSwitcher(){
+    const switcher=document.getElementById('control-switcher');if(!switcher)return;
+    switcher.querySelectorAll('.mode-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{const mode=btn.dataset.mode;if(mode)this.setControlMode(mode);});
+    });
+    this.updateSwitcherUI();
+  }
+  setControlMode(mode){this.controlMode=mode;this.updateSwitcherUI();this.checkLandscape();}
+  updateSwitcherUI(){
+    const switcher=document.getElementById('control-switcher');
+    if(switcher){switcher.querySelectorAll('.mode-btn').forEach(btn=>{btn.classList.toggle('active',btn.dataset.mode===this.controlMode);});switcher.style.display=(this.state!=='PLAYING')?'flex':'none';}
+    const ingame=document.getElementById('ingame-ctrl-toggle');
+    if(ingame)ingame.style.display=(this.state==='PLAYING')?'flex':'none';
+  }
+  checkLandscape(){
+    const overlay=document.getElementById('rotate-overlay');if(!overlay)return;
+    const isPortrait=window.innerHeight>window.innerWidth;
+    if(this.controlMode==='touch'&&isPortrait&&!this.rotateDismissed)overlay.classList.add('show');else overlay.classList.remove('show');
+  }
+  isInGameToggleArea(x,y){return x>=0&&x<=44&&y>=0&&y<=44;}
   bindEvents(){
     window.addEventListener('keydown',e=>this.onKeyDown(e));
     window.addEventListener('keyup',e=>this.onKeyUp(e));
@@ -373,6 +547,7 @@ class EchoMaze {
   onMouseMove(e){const r=this.canvas.getBoundingClientRect();this.mouse.x=e.clientX-r.left;this.mouse.y=e.clientY-r.top;}
   onMouseDown(e){
     const x=this.mouse.x,y=this.mouse.y;
+    if(this.state==='PLAYING'&&this.isInGameToggleArea(x,y)){this.setControlMode(this.controlMode==='touch'?'keyboard':'touch');return;}
     this.menuRects.forEach(item=>{if(item.rect&&this.pointInRect(x,y,item.rect)&&item.action)item.action();});
   }
   pointInRect(x,y,rect){return x>=rect.x&&x<=rect.x+rect.w&&y>=rect.y&&y<=rect.y+rect.h;}
@@ -395,7 +570,11 @@ class EchoMaze {
     if(this.state==='MENU_MODE'){
       if(event.key==='1'){this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}
       if(event.key==='2'){this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}
-      if(event.key==='3'){this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}
+      if(event.key==='3'){this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;
+    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
+    this.controlMode=this._autoTouch?'touch':'keyboard';
+    this.touchCtrl=null;
+    this.rotateDismissed=false;this.state='PLAYING';this.resetGame();}
       if(event.key.toLowerCase()==='l')this.loadGame();
     }
 
@@ -468,39 +647,6 @@ class EchoMaze {
     if(this.mode==='LEVEL')this.goalPos=[this.randInt(15,25)*CELL_SIZE,this.randInt(15,25)*CELL_SIZE];
   }
   randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
-
-  getChunk(gx,gy){
-    const cx=floorDiv(gx,CHUNK_SIZE),cy=floorDiv(gy,CHUNK_SIZE),key=`${cx},${cy}`;
-    if(!this.chunks[key]){
-      const seed=this.seed+cx*1000+cy;
-      this.chunks[key]=new Chunk(cx,cy,this.difficulty,seed);
-      const sp=new SeededRandom(seed), cfg=this.getConfig();
-      let cnt=sp.randInt(cfg.enemySpawn[0],cfg.enemySpawn[1]);
-      const safeR=3,psgx=floorDiv(this.playerPos[0],CELL_SIZE),psgy=floorDiv(this.playerPos[1],CELL_SIZE);
-      for(let cr=0,at=0;cr<cnt&&at<cnt*6;at++){
-        const lx=sp.randInt(0,CHUNK_SIZE-1),ly=sp.randInt(0,CHUNK_SIZE-1);
-        const wx=cx*CHUNK_SIZE+lx,wy=cy*CHUNK_SIZE+ly;
-        if(Math.abs(wx-psgx)<=safeR&&Math.abs(wy-psgy)<=safeR)continue;
-        this.enemies.push(new Enemy(wx*CELL_SIZE+CELL_SIZE/2,wy*CELL_SIZE+CELL_SIZE/2,cfg));cr++;
-      }
-    }
-    return this.chunks[key];
-  }
-
-  checkCollision(pos, isDashing=false){
-    const gx=floorDiv(pos[0],CELL_SIZE),gy=floorDiv(pos[1],CELL_SIZE);
-    const lx=((gx%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE,ly=((gy%CHUNK_SIZE)+CHUNK_SIZE)%CHUNK_SIZE;
-    const chunk=this.getChunk(gx,gy),cell=chunk.cells[`${lx},${ly}`];
-    if(!cell)return pos;
-    const cx=gx*CELL_SIZE,cy=gy*CELL_SIZE,p=15,np=[pos[0],pos[1]];
-    if(isDashing){if(cell.walls[0]&&pos[1]<cy)cell.walls[0]=false;if(cell.walls[2]&&pos[1]>cy+CELL_SIZE)cell.walls[2]=false;if(cell.walls[3]&&pos[0]<cx)cell.walls[3]=false;if(cell.walls[1]&&pos[0]>cx+CELL_SIZE)cell.walls[1]=false;return np;}
-    if(cell.walls[0]&&pos[1]<cy+p)np[1]=cy+p;
-    if(cell.walls[2]&&pos[1]>cy+CELL_SIZE-p)np[1]=cy+CELL_SIZE-p;
-    if(cell.walls[3]&&pos[0]<cx+p)np[0]=cx+p;
-    if(cell.walls[1]&&pos[0]>cx+CELL_SIZE-p)np[0]=cx+CELL_SIZE-p;
-    return np;
-  }
-
   saveGame(){
     const d={playerPos:this.playerPos,energy:this.energy,score:this.score,seed:this.seed,mode:this.mode,difficulty:this.difficulty,brightMode:this.brightMode,godMode:this.godMode,visibility:this.visibility,visibilityTimer:this.visibilityTimer,goalPos:this.goalPos||null,
       inventory:this.inventory, buffs:this.buffs, groundItems:this.groundItems};
@@ -571,6 +717,7 @@ class EchoMaze {
       return;
     }
     if(this.mode==='WATCH')this.handleAiLogic();
+    if(this.controlMode==='touch'&&this.touchCtrl)this.touchCtrl.applyMovement();
     const cfg=this.getConfig();
     if(this.dashCooldown>0)this.dashCooldown--;if(this.shootCooldown>0)this.shootCooldown--;
     const accel=0.28,fric=0.86;
@@ -697,7 +844,7 @@ class EchoMaze {
   revealArea(pos,radius){for(let i=0;i<100;i++){const a=(i/100)*Math.PI*2,rx=pos[0]+Math.cos(a)*radius,ry=pos[1]+Math.sin(a)*radius,gx=floorDiv(rx,CELL_SIZE),gy=floorDiv(ry,CELL_SIZE);this.visibility[`${gx},${gy}`]=1.0;this.visibilityTimer[`${gx},${gy}`]=60;}}
 
   draw() {
-    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height;ctx.clearRect(0,0,w,h);
+    const ctx=this.ctx,w=this.w,h=this.h;ctx.clearRect(0,0,w,h);
     if(this.state!=='PLAYING'){this.drawMenu();return;}
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     let shakeX = 0, shakeY = 0;
@@ -796,6 +943,15 @@ class EchoMaze {
     });
     ctx.globalAlpha = 1;
     if(this.mode==='LEVEL'&&!this.gameOver&&!this.won)this.drawEdgeGoalArrow(w,h);
+    // In-game control toggle
+    if(this.state==='PLAYING'){
+      ctx.fillStyle='rgba(13,18,32,0.7)';ctx.beginPath();ctx.arc(20,20,16,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle='#3a8fa8';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(20,20,16,0,Math.PI*2);ctx.stroke();
+      ctx.fillStyle='#58c4dd';ctx.font='12px system-ui,sans-serif';ctx.textAlign='center';
+      ctx.fillText(this.controlMode==='touch'?'📱':'⌨️',20,24);ctx.textAlign='left';
+    }
+    // Touch controls
+    if(this.controlMode==='touch'&&this.state==='PLAYING'&&!this.paused)this.touchCtrl.draw(ctx);
     // Pause overlay
     if(this.paused&&!this.gameOver&&!this.won){
       ctx.fillStyle='rgba(0,0,0,0.75)';ctx.fillRect(0,0,w,h);
@@ -841,8 +997,8 @@ class EchoMaze {
     ctx.closePath(); ctx.fill(); ctx.stroke();
   }
   drawInventory() {
-    const ctx = this.ctx, w = this.canvas.width, h = this.canvas.height;
-    const slotW = 70, slotH = 56, gap = 8, totalW = 4*slotW + 3*gap;
+    const ctx = this.ctx, w = this.w, h = this.h;
+    const slotW = this.controlMode==='touch'?60:70, slotH = 56, gap = 8, totalW = 4*slotW + 3*gap;
     const startX = w/2 - totalW/2, y = h - slotH - 24;
     ITEM_KEYS.forEach((type, i) => {
       const x = startX + i*(slotW+gap);
@@ -893,7 +1049,8 @@ class EchoMaze {
   }
 
   drawMenu() {
-    const ctx=this.ctx,w=this.canvas.width,h=this.canvas.height,t=performance.now()/1000;
+    this.updateSwitcherUI();
+    const ctx=this.ctx,w=this.w,h=this.h,t=performance.now()/1000;
     ctx.fillStyle=COLORS.bg;ctx.fillRect(0,0,w,h);
     this.updateMenuParticles();
     this.menuParticles.forEach(p=>{const a=p.life/p.ml;ctx.fillStyle=p.color;ctx.globalAlpha=0.75*a;ctx.beginPath();ctx.arc(p.x,p.y,Math.max(1,p.size*a),0,Math.PI*2);ctx.fill();ctx.globalAlpha=1.0;});
@@ -936,7 +1093,11 @@ class EchoMaze {
       const btns=[
         {label:'1. Survival',action:()=>{this.mode='SURVIVAL';this.transitionTo('MENU_DIFFICULTY');}},
         {label:'2. Level',action:()=>{this.mode='LEVEL';this.transitionTo('MENU_DIFFICULTY');}},
-        {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;this.state='PLAYING';this.resetGame();}},
+        {label:'3. Watch',action:()=>{this.mode='WATCH';this.difficulty='NORMAL';this.brightMode=true;this.godMode=false;
+    this._autoTouch=('ontouchstart'in window||navigator.maxTouchPoints>0)&&window.innerWidth<=1024;
+    this.controlMode=this._autoTouch?'touch':'keyboard';
+    this.touchCtrl=null;
+    this.rotateDismissed=false;this.state='PLAYING';this.resetGame();}},
         {label:'L. Load Game',action:()=>this.loadGame()},
       ];
       btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160+i*gap,bw,48,item.label,item.action);});
