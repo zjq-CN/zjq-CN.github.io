@@ -97,6 +97,15 @@ class TouchInput {
       }, { passive: false });
     }
 
+    // Back button (menu navigation)
+    const backBtn = document.getElementById('touch-back-btn');
+    if (backBtn) {
+      backBtn.addEventListener('touchstart', e => {
+        e.preventDefault();
+        this.game.onTouchBack();
+      }, { passive: false });
+    }
+
     // Menu touch handling on canvas
     this.canvasEl = document.getElementById('game-canvas');
     if (this.canvasEl) {
@@ -189,6 +198,20 @@ class TouchInput {
       pauseBtn.style.fontSize = Math.max(14, Math.round(ps * 0.45)) + 'px';
       pauseBtn.style.top = Math.max(10, h * 0.015) + 'px';
       pauseBtn.style.left = Math.max(10, w * 0.025) + 'px';
+    }
+
+    // ── BACK BUTTON (top-left, next to pause) ──
+    const backBtn = document.getElementById('touch-back-btn');
+    if (backBtn) {
+      const bs = Math.max(32, Math.min(44, minDim * 0.055));
+      backBtn.style.width = bs + 'px';
+      backBtn.style.height = bs + 'px';
+      backBtn.style.fontSize = Math.max(16, Math.round(bs * 0.5)) + 'px';
+      backBtn.style.top = Math.max(10, h * 0.015) + 'px';
+      // Position to the right of the pause button
+      const pauseLeft = Math.max(10, w * 0.025);
+      const pauseSize = Math.max(32, Math.min(44, minDim * 0.055));
+      backBtn.style.left = (pauseLeft + pauseSize + 8) + 'px';
     }
   }
 
@@ -355,6 +378,13 @@ class TouchInput {
       this.showGameControls();
     } else {
       this.hideGameControls();
+    }
+
+    // Back button: show during menu navigation, hide during gameplay & pause
+    const inMenu = !inPlay && state !== 'MENU_PAUSE';
+    const backBtn = document.getElementById('touch-back-btn');
+    if (backBtn) {
+      backBtn.style.display = inMenu ? 'flex' : 'none';
     }
 
     // Menu navigation via joystick

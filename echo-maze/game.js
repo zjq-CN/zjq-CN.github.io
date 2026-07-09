@@ -35,9 +35,9 @@ const COLORS = {
 
 // Difficulty config: used when brightMode=false and godMode=false
 const DIFFICULTY_CONFIG = {
-  EASY:  { label:'Easy',    enemySpeed:0.49, triggerDist:250, maxSpeed:2.7, fadeRate:0.995, pingRadius:1100, pingSpeed:15, pingCost:4,  dashCost:8,  dashCd:25, energyDrain:0.005, enemySpawn:[0,1], itemChance:0.8, powerupChance:0.5, killEnergy:25, dropChance:0.5 },
-  NORMAL:{ label:'Normal',  enemySpeed:1.05, triggerDist:450, maxSpeed:2.1, fadeRate:0.99, pingRadius:700,  pingSpeed:14, pingCost:10, dashCost:16, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.5, powerupChance:0.3, killEnergy:12, dropChance:0.25 },
-  HARD:  { label:'Hard',    enemySpeed:1.75, triggerDist:800, maxSpeed:2.0, fadeRate:0.985, pingRadius:450,  pingSpeed:12, pingCost:20, dashCost:22, dashCd:80, energyDrain:0.035, enemySpawn:[3,5], itemChance:0.2, powerupChance:0.1, killEnergy:5,  dropChance:0.15 },
+  EASY:  { label:'Easy',    enemySpeed:0.5,  triggerDist:250, maxSpeed:2.8, fadeRate:0.996, pingRadius:1000, pingSpeed:20, pingCost:5,  dashCost:15, dashCd:25, energyDrain:0.01,  enemySpawn:[1,2], itemChance:1,   powerupChance:0.5, killEnergy:25, dropChance:0.5  },
+  NORMAL:{ label:'Normal',  enemySpeed:0.8,  triggerDist:350, maxSpeed:2.6, fadeRate:0.993, pingRadius:700,  pingSpeed:20, pingCost:9,  dashCost:18, dashCd:45, energyDrain:0.015, enemySpawn:[1,3], itemChance:0.7, powerupChance:0.3, killEnergy:20, dropChance:0.4  },
+  HARD:  { label:'Hard',    enemySpeed:1.2,  triggerDist:500, maxSpeed:2.4, fadeRate:0.99,  pingRadius:450,  pingSpeed:20, pingCost:13, dashCost:21, dashCd:60, energyDrain:0.025, enemySpawn:[2,5], itemChance:0.7, powerupChance:0.3, killEnergy:15, dropChance:0.3  },
 };
 
 const ITEM_DEFS = {
@@ -112,8 +112,8 @@ class Chunk {
 }
 
 class Bullet {
-  constructor(x, y, dx, dy, speedMult=12) {
-    this.pos=[x,y]; this.vel=[dx*speedMult,dy*speedMult]; this.bounces=6; this.radius=4; this.damage=50; this.dead=false;
+  constructor(x, y, dx, dy, speedMult=12, damage=50) {
+    this.pos=[x,y]; this.vel=[dx*speedMult,dy*speedMult]; this.bounces=6; this.radius=4; this.damage=damage; this.dead=false;
     this.scatterType = 0; // 0=normal, 1=split after timer, 2=split on wall
     this.scatterTimer = 15;
     this.isScatterChild = false;
@@ -497,6 +497,14 @@ class EchoMaze {
     if (navigator.vibrate) navigator.vibrate(10);
   }
 
+  onTouchBack() {
+    if (this.menuTransition) return;
+    if (this.state === 'MENU_OPTIONS') this.transitionTo('MENU_DIFFICULTY');
+    else if (this.state === 'MENU_DIFFICULTY') this.transitionTo('MENU_MODE');
+    else if (this.state === 'MENU_TRAIN') { this.state = 'MENU_MODE'; this.trainingState = 'idle'; }
+    if (navigator.vibrate) navigator.vibrate(10);
+  }
+
   onTouchPing() {
     if (this.state !== 'PLAYING') return;
     const cost = this.isGod() ? 0 : this.getConfig().pingCost;
@@ -773,9 +781,13 @@ class EchoMaze {
     if (free) return;
   }
   shoot(){
-    let speedMult = 8;
     const cfg=this.getConfig();
-    if (cfg.enemySpeed>1.6) speedMult=6;
+    let speedMult = 8;
+    let bulletDamage = 50;
+    let shootCd = 12;
+    if (this.difficulty === 'EASY') { speedMult = 6; bulletDamage = 50; shootCd = 15; }
+    else if (this.difficulty === 'HARD') { speedMult = 10; bulletDamage = 35; shootCd = 9; }
+    else { bulletDamage = 35; shootCd = 12; }
 
     let scatterType = 0;
     if (this.buffs.scatter.active) {
@@ -790,14 +802,14 @@ class EchoMaze {
       }
     }
 
-    const b = new Bullet(this.playerPos[0],this.playerPos[1],this.lastMoveDir[0],this.lastMoveDir[1],speedMult);
+    const b = new Bullet(this.playerPos[0],this.playerPos[1],this.lastMoveDir[0],this.lastMoveDir[1],speedMult,bulletDamage);
     b.scatterType = scatterType;
     if (scatterType === 1) b.scatterTimer = 15;
     this.bullets.push(b);
-    this.shootCooldown=12;
+    this.shootCooldown=shootCd;
   }
   dash(cost){
-    this.energy-=cost;const cfg=this.getConfig();this.dashCooldown=this.isGod()||this.difficulty==='EASY'?40:cfg.dashCd;
+    this.energy-=cost;const cfg=this.getConfig();this.dashCooldown=this.isGod()||this.difficulty==='EASY'?30:cfg.dashCd;
     const dist=80;
     if(this.keys['w'])this.playerPos[1]-=dist;else if(this.keys['s'])this.playerPos[1]+=dist;
     else if(this.keys['a'])this.playerPos[0]-=dist;else if(this.keys['d'])this.playerPos[0]+=dist;
@@ -936,7 +948,7 @@ class EchoMaze {
       if (this.pickupMessages[i].timer <= 0) this.pickupMessages.splice(i,1);
     }
   }
-  revealArea(pos,radius){for(let i=0;i<100;i++){const a=(i/100)*Math.PI*2,rx=pos[0]+Math.cos(a)*radius,ry=pos[1]+Math.sin(a)*radius,gx=floorDiv(rx,CELL_SIZE),gy=floorDiv(ry,CELL_SIZE);this.visibility[`${gx},${gy}`]=1.0;this.visibilityTimer[`${gx},${gy}`]=60;}}
+  revealArea(pos,radius){for(let i=0;i<100;i++){const a=(i/100)*Math.PI*2,rx=pos[0]+Math.cos(a)*radius,ry=pos[1]+Math.sin(a)*radius,gx=floorDiv(rx,CELL_SIZE),gy=floorDiv(ry,CELL_SIZE);this.visibility[`${gx},${gy}`]=1.0;this.visibilityTimer[`${gx},${gy}`]=120;}}
 
   draw() {
     const ctx=this.ctx,w=this.cssWidth,h=this.cssHeight;ctx.clearRect(0,0,w,h);
@@ -1045,7 +1057,9 @@ class EchoMaze {
       ctx.fillStyle=this.won?COLORS.goal:COLORS.enemy;ctx.font=`bold ${Math.round(52*UI_SCALE)}px system-ui,sans-serif`;
       const msg=this.won?'YOU WON!':'GAME OVER',tw=ctx.measureText(msg).width;
       ctx.fillText(msg,w/2-tw/2,h/2-10);
-      ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;const ht='Press R to return to menu',hw=ctx.measureText(ht).width;ctx.fillText(ht,w/2-hw/2,h/2+30);
+      ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;
+      if(this.isTouchDevice){const ht='Tap to return to menu',hw=ctx.measureText(ht).width;ctx.fillText(ht,w/2-hw/2,h/2+30);}
+      else{const ht='Press R to return to menu',hw=ctx.measureText(ht).width;ctx.fillText(ht,w/2-hw/2,h/2+30);}
     }
     if(this.messageTimer>0){this.messageTimer--;ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(w/2-170+10,20,340,36);ctx.fillStyle=COLORS.text;ctx.font=`${Math.round(15*UI_SCALE)}px system-ui,sans-serif`;ctx.textAlign='center';ctx.fillText(this.message,w/2+10,44);}
 
@@ -1180,7 +1194,7 @@ class EchoMaze {
       ];
       btns.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160*UI_SCALE+i*gap,bw,48*UI_SCALE,item.label,item.action);});
       bottomY=by+160*UI_SCALE+btns.length*gap+50*UI_SCALE;
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('Click or press key — ESC to return',cx,bottomY);
+      if(!this.isTouchDevice){ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('Click or press key — ESC to return',cx,bottomY);}
     }
     else if (state === 'MENU_DIFFICULTY') {
       ctx.fillStyle=COLORS.text;ctx.font=`bold ${Math.round(18*UI_SCALE)}px system-ui,sans-serif`;
@@ -1193,7 +1207,7 @@ class EchoMaze {
       ];
       diffs.forEach((item,i)=>{this.drawMenuButton(ctx,cx,by+160*UI_SCALE+i*gap,bw,48*UI_SCALE,item.label,item.action);});
       bottomY=by+160*UI_SCALE+diffs.length*gap+50*UI_SCALE;
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('ESC to go back',cx,bottomY);
+      if(!this.isTouchDevice){ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('ESC to go back',cx,bottomY);}
     }
     else if (state === 'MENU_OPTIONS') {
       const ml=this.mode==='SURVIVAL'?'Survival':'Level';
@@ -1205,7 +1219,7 @@ class EchoMaze {
       const startW=240*UI_SCALE;
       this.drawMenuButton(ctx,cx,ty+140*UI_SCALE,startW,44*UI_SCALE,'Start Game',()=>{this.state='PLAYING';this.resetGame();});
       bottomY=ty+200*UI_SCALE;
-      ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);
+      if(!this.isTouchDevice){ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(14*UI_SCALE)}px system-ui,sans-serif`;ctx.fillText('SPACE/ENTER to start — 1/2 toggle — ESC back',cx,bottomY);}
     }
     else if (state === 'MENU_TRAIN') {
       ctx.fillStyle=COLORS.text;ctx.font='bold 18px system-ui,sans-serif';
@@ -1263,8 +1277,8 @@ class EchoMaze {
         bottomY=by+380;
       }
       if(this.trainingState==='idle'){
-        ctx.fillStyle=COLORS.textDim;ctx.font='13px system-ui,sans-serif';
-        ctx.fillText('ESC to return',cx,bottomY);
+        if(!this.isTouchDevice){ctx.fillStyle=COLORS.textDim;ctx.font='13px system-ui,sans-serif';
+        ctx.fillText('ESC to return',cx,bottomY);}
       }
     }
   }
@@ -1287,10 +1301,10 @@ class EchoMaze {
     // Buttons
     const btnW=220*UI_SCALE, btnH=44*UI_SCALE, gap=56*UI_SCALE;
     this.menuRects=[];
-    this.drawMenuButton(ctx,cx,py+100*UI_SCALE,btnW,btnH,'Resume (ESC)',()=>{this.state='PLAYING';});
+    this.drawMenuButton(ctx,cx,py+100*UI_SCALE,btnW,btnH,this.isTouchDevice?'Resume':'Resume (ESC)',()=>{this.state='PLAYING';});
     this.drawMenuButton(ctx,cx,py+160*UI_SCALE,btnW,btnH,'Quit',()=>{this.state='MENU_MODE';});
-    ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(13*UI_SCALE)}px system-ui,sans-serif`;
-    ctx.fillText('Press ESC or click to resume',cx,py+ph-12*UI_SCALE);
+    if(!this.isTouchDevice){ctx.fillStyle=COLORS.textDim;ctx.font=`${Math.round(13*UI_SCALE)}px system-ui,sans-serif`;
+    ctx.fillText('Press ESC or click to resume',cx,py+ph-12*UI_SCALE);}
   }
 
   drawMenuButton(ctx, x, y, w, h, label, action){

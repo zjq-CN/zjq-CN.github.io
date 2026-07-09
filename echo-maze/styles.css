@@ -333,6 +333,30 @@ canvas {
   transform: scale(0.9);
 }
 
+/* ─── Back Button (menu only) ─── */
+#touch-back-btn {
+  position: fixed;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  background: rgba(13,18,32,0.65);
+  color: #e0e6f0;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 55;
+  touch-action: manipulation;
+}
+#touch-back-btn:active {
+  background: rgba(88,196,221,0.15);
+  border-color: rgba(88,196,221,0.5);
+  transform: scale(0.9);
+}
+
 /* ─── Screen Size Adaptations (JS handles sizing/positioning) ─── */
 /* Very small screens — tighten up gaps */
 @media (max-height: 380px) and (orientation: landscape) {
